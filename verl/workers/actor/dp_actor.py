@@ -232,10 +232,10 @@ class DataParallelPPOActor(BasePPOActor):
 
         temperature = data.meta_info['temperature']  # temperature must be in the data.meta_info to avoid slient error
 
-        select_keys = ['responses', 'input_ids', 'attention_mask', 'position_ids', 'old_log_probs', 'advantages']
+        select_keys = ['responses', 'input_ids', 'attention_mask', 'position_ids', 'old_log_probs', 'advantages', 'action_mask']
         if self.config.use_kl_loss:
             select_keys.append('ref_log_prob')
-        batch = data.select(batch_keys=select_keys).batch
+        batch = data.select(batch_keys=select_keys, strict=False).batch
         has_multi_modal_inputs = 'multi_modal_inputs' in data.non_tensor_batch.keys()
 
         # Split to make minibatch iterator for updating the actor
@@ -243,7 +243,7 @@ class DataParallelPPOActor(BasePPOActor):
         if has_multi_modal_inputs:
             num_mini_batches = data.batch.batch_size[0] // self.config.ppo_mini_batch_size
             non_tensor_select_keys = ['multi_modal_inputs']
-            dataloader = data.select(select_keys, non_tensor_select_keys).chunk(num_mini_batches)
+            dataloader = data.select(select_keys, non_tensor_select_keys, strict=False).chunk(num_mini_batches)
         else:
             dataloader = batch.split(self.config.ppo_mini_batch_size)
 
@@ -255,7 +255,7 @@ class DataParallelPPOActor(BasePPOActor):
                 if has_multi_modal_inputs:
                     self.gradient_accumulation = self.config.ppo_mini_batch_size // self.config.ppo_micro_batch_size_per_gpu
                     num_micro_batches = mini_batch.batch.batch_size[0] // self.config.ppo_micro_batch_size_per_gpu
-                    micro_batches = data.select(select_keys, non_tensor_select_keys).chunk(num_micro_batches)
+                    micro_batches = data.select(select_keys, non_tensor_select_keys, strict=False).chunk(num_micro_batches)
                 elif self.config.use_dynamic_bsz:
                     max_token_len = self.config.ppo_max_token_len_per_gpu * self.ulysses_sequence_parallel_size
                     micro_batches, _ = rearrange_micro_batches(batch=mini_batch, max_token_len=max_token_len)
@@ -274,8 +274,9 @@ class DataParallelPPOActor(BasePPOActor):
                         data = data.to(torch.cuda.current_device())  # actor device is cpu when using offload
                     responses = data['responses']
                     response_length = responses.size(1)
-                    attention_mask = data['attention_mask']
-                    response_mask = attention_mask[:, -response_length:]
+                    action_or_attn_mask = data['action_mask'] if 'action_mask' in data.keys() else data['attention_mask']
+
+                    response_mask = action_or_attn_mask[:, -response_length:]
                     old_log_prob = data['old_log_probs']
                     advantages = data['advantages']
 

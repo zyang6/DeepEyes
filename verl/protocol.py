@@ -335,7 +335,7 @@ class DataProto:
             self.batch = self.batch.to(device)
         return self
 
-    def select(self, batch_keys=None, non_tensor_batch_keys=None, meta_info_keys=None, deepcopy=False) -> 'DataProto':
+    def select(self, batch_keys=None, non_tensor_batch_keys=None, meta_info_keys=None, deepcopy=False, strict=True) -> 'DataProto':
         """Select a subset of the DataProto via batch_keys and meta_info_keys
 
         Args:
@@ -348,7 +348,7 @@ class DataProto:
         # TODO (zhangchi.usc1992) whether to copy
         if batch_keys is not None:
             batch_keys = tuple(batch_keys)
-            sub_batch = self.batch.select(*batch_keys)
+            sub_batch = self.batch.select(*batch_keys, strict=strict)
         else:
             sub_batch = self.batch
 

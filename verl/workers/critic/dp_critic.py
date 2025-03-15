@@ -168,8 +168,8 @@ class DataParallelPPOCritic(BasePPOCritic):
         self.critic_module.train()
         metrics = {}
 
-        select_keys = ['input_ids', 'responses', 'attention_mask', 'position_ids', 'values', 'returns']
-        batch = data.select(batch_keys=select_keys).batch
+        select_keys = ['input_ids', 'responses', 'attention_mask', 'position_ids', 'values', 'returns', 'action_mask']
+        batch = data.select(batch_keys=select_keys, strict=False).batch
         has_multi_modal_inputs = 'multi_modal_inputs' in data.non_tensor_batch.keys()
 
         # Split to make minibatch iterator for updating the actor
@@ -177,7 +177,7 @@ class DataParallelPPOCritic(BasePPOCritic):
         if has_multi_modal_inputs:
             num_mini_batches = data.batch.batch_size[0] // self.config.ppo_mini_batch_size
             non_tensor_select_keys = ['multi_modal_inputs']
-            dataloader = data.select(select_keys, non_tensor_select_keys).chunk(num_mini_batches)
+            dataloader = data.select(select_keys, non_tensor_select_keys, strict=False).chunk(num_mini_batches)
         else:
             dataloader = batch.split(self.config.ppo_mini_batch_size)
 
@@ -187,7 +187,7 @@ class DataParallelPPOCritic(BasePPOCritic):
                 mini_batch = data
                 if has_multi_modal_inputs:
                     num_micro_batches = mini_batch.batch.batch_size[0] // self.config.ppo_micro_batch_size_per_gpu
-                    micro_batches = data.select(select_keys, non_tensor_select_keys).chunk(num_micro_batches)
+                    micro_batches = data.select(select_keys, non_tensor_select_keys, strict=False).chunk(num_micro_batches)
                 elif self.config.use_dynamic_bsz:
                     max_token_len = self.config.ppo_max_token_len_per_gpu * self.ulysses_sequence_parallel_size
                     micro_batches, _ = rearrange_micro_batches(batch=mini_batch, max_token_len=max_token_len)
@@ -205,13 +205,13 @@ class DataParallelPPOCritic(BasePPOCritic):
                         data = data.to(torch.cuda.current_device())  # critic device is cpu when using offload
                     input_ids = data['input_ids']
                     responses = data['responses']
-                    attention_mask = data['attention_mask']
+                    action_or_attn_mask = data['action_mask'] if 'action_mask' in data.keys() else data['attention_mask']
                     position_ids = data['position_ids']
                     values = data['values']
                     returns = data['returns']
                     response_length = responses.size(1)
 
-                    eos_mask = attention_mask[:, -response_length - 1:-1]
+                    eos_mask = action_or_attn_mask[:, -response_length - 1:-1]
 
                     vpreds = self._forward_micro_batch(data)
 

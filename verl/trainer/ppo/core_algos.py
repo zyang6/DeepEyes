@@ -95,10 +95,20 @@ def compute_gae_advantage_return(token_level_rewards: torch.Tensor, values: torc
         advantages_reversed = []
         gen_len = token_level_rewards.shape[-1]
 
+        # For masked tokens, force gamma=1 and lambda=1, regardless of the values in config
+        gamma_masked = eos_mask * gamma + 1 - eos_mask
+        lam_masked = eos_mask * lam + 1 - eos_mask
+        nextvalues_skip_obs = 0
+
         for t in reversed(range(gen_len)):
+            next_step_mask = eos_mask[:, t + 1] if t < gen_len - 1 else 1.0
             nextvalues = values[:, t + 1] if t < gen_len - 1 else 0.0
-            delta = token_level_rewards[:, t] + gamma * nextvalues - values[:, t]
-            lastgaelam = delta + gamma * lam * lastgaelam
+            nextvalues_skip_obs = (1 - next_step_mask) * nextvalues_skip_obs + next_step_mask * nextvalues
+            this_step_gamma = gamma_masked[:, t]
+            this_step_lam = lam_masked[:, t]
+            delta = token_level_rewards[:, t] + this_step_gamma * nextvalues_skip_obs - values[:, t]
+            delta *= eos_mask[:, t]
+            lastgaelam = delta + this_step_gamma * this_step_lam * lastgaelam
             advantages_reversed.append(lastgaelam)
         advantages = torch.stack(advantages_reversed[::-1], dim=1)
 
@@ -220,12 +230,14 @@ def compute_reinforce_plus_plus_outcome_advantage(token_level_rewards: torch.Ten
     with torch.no_grad():
         returns = torch.zeros_like(token_level_rewards)
         running_return = 0
+        gamma_masked = eos_mask * gamma + 1 - eos_mask
 
         for t in reversed(range(token_level_rewards.shape[1])):
-            running_return = token_level_rewards[:, t] + gamma * running_return
+            this_step_gamma = gamma_masked[:, t]
+            running_return = token_level_rewards[:, t] + this_step_gamma * running_return
             returns[:, t] = running_return
             # Reset after EOS
-            running_return = running_return * eos_mask[:, t]
+            # running_return = running_return * eos_mask[:, t]
 
         advantages = verl_F.masked_whiten(returns, eos_mask)
         advantages = advantages * eos_mask
