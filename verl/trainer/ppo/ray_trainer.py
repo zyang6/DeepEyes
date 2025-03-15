@@ -247,10 +247,18 @@ def _compute_response_info(batch):
     prompt_length = prompt_mask.sum(-1).float()
     response_length = response_mask.sum(-1).float()  # (batch_size,)
 
+    if 'action_mask' in batch.batch:
+        action_mask = batch.batch['action_mask'][:, -response_length:]
+        obs_mask = response_mask * (1 - action_mask)
+        obs_length = obs_mask.sum(-1).float()
+    else:
+        obs_length = torch.zeros_like(response_length)
+
     return dict(
         response_mask=response_mask,
         prompt_length=prompt_length,
         response_length=response_length,
+        obs_length=obs_length,
     )
 
 
@@ -265,13 +273,15 @@ def compute_data_metrics(batch, use_critic=True):
     max_response_length = batch.batch['responses'].shape[-1]
 
     prompt_mask = batch.batch['attention_mask'][:, :-max_response_length].bool()
-    response_mask = batch.batch['attention_mask'][:, -max_response_length:].bool()
+    action_or_attn_mask = batch.batch['action_mask'] if 'action_mask' in batch.batch else batch.batch['attention_mask']
+    response_mask = action_or_attn_mask[:, -max_response_length:].bool()
 
     max_prompt_length = prompt_mask.size(-1)
 
     response_info = _compute_response_info(batch)
     prompt_length = response_info['prompt_length']
     response_length = response_info['response_length']
+    obs_length = response_info['obs_length']
 
     valid_adv = torch.masked_select(advantages, response_mask)
     valid_returns = torch.masked_select(returns, response_mask)
@@ -329,6 +339,12 @@ def compute_data_metrics(batch, use_critic=True):
             torch.min(response_length).detach().item(),
         'response_length/clip_ratio':
             torch.mean(torch.eq(response_length, max_response_length).float()).detach().item(),
+        
+        # obs length
+        'obs_length/mean': torch.mean(obs_length).detach().item(),
+        'obs_length/min': torch.min(obs_length).detach().item(),
+        'obs_length/max': torch.max(obs_length).detach().item(),
+
         # prompt length
         'prompt_length/mean':
             torch.mean(prompt_length).detach().item(),
