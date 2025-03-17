@@ -102,10 +102,9 @@ actor_rollout_ref:
       do_sample: False # default eager for validation
     agent:
       activate_agent: False
-      env_names: null
-      action_stop_tokens: null
-      action_stop_token_ids: null
-      max_turns: 100
+      single_obs_max_length: 4096
+      max_obs_total_length: 16384
+      max_turns: 10000
 
 
 critic:
