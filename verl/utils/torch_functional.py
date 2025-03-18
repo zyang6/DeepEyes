@@ -167,6 +167,16 @@ def get_eos_mask(response_id: torch.Tensor, eos_token: Union[int, List[int]] = 2
     return eos_mask
 
 
+def get_eos_mask_multi_turn(response_id: torch.Tensor, pad_token_id: Union[int, List[int]], dtype=torch.int64):
+    if isinstance(pad_token_id, int):
+        pad_token_id = [pad_token_id]
+
+    eos_mask = torch.zeros_like(response_id, dtype=torch.bool)
+    for token in pad_token_id:
+        eos_mask |= response_id.eq(token)
+    return torch.logical_not(eos_mask).to(dtype)
+
+
 def compute_grad_norm(model: nn.Module):
     total_grad_square = 0
     total_params = 0

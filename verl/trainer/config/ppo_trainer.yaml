@@ -103,9 +103,15 @@ actor_rollout_ref:
     agent:
       activate_agent: False
       single_obs_max_length: 4096
-      max_obs_total_length: 16384
       max_turns: 10000
-
+      concurrent_workers: 16
+      action_start: <tool_call>
+      action_end: </tool_call>
+      tool_name_key: tool_names
+      tool_meta_key: tool_meta
+      tool_desc_start: <tool>
+      tool_desc_end: </tool>
+      show_tqdm: True
 
 critic:
   strategy: fsdp

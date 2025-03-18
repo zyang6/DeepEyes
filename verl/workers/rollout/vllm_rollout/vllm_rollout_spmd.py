@@ -34,7 +34,7 @@ from tensordict import TensorDict
 from torch import nn
 from typing import Any, Union
 from verl import DataProto
-from verl.utils.torch_functional import get_eos_mask, pad_2d_list_to_length
+from verl.utils.torch_functional import get_eos_mask, get_eos_mask_multi_turn, pad_2d_list_to_length
 from verl.workers.rollout.base import BaseRollout
 from vllm.distributed import parallel_state as vllm_ps
 from vllm import LLM, SamplingParams
@@ -210,7 +210,7 @@ class vLLMRollout(BaseRollout):
         # users can customize different sampling_params at different run
         with self.update_sampling_params(**kwargs):
             if self.config.agent.activate_agent:
-                response, action_mask, reward = agent_rollout_loop(
+                response, action_mask, env_reward = agent_rollout_loop(
                     self.config,
                     self.inference_engine,
                     vllm_inputs, 
@@ -222,7 +222,7 @@ class vLLMRollout(BaseRollout):
                     prompts=vllm_inputs,  # because we have already convert it to prompt token id
                     sampling_params=self.sampling_params,
                     use_tqdm=False)
-                action_mask, reward = None, None
+                action_mask, env_reward = None, None
 
                 # TODO(sgm): disable logprob when recompute_log_prob is enable
                 # if n = 1: (bs, response_length) ; if n > 1: (bs * n, response_length)
@@ -258,7 +258,10 @@ class vLLMRollout(BaseRollout):
         # position_ids:   [0,0,0,0,0,1,2,3, | 4,5,6,7,8,9,10,11]
         response_position_ids = position_ids[:, -1:] + delta_position_id
         position_ids = torch.cat([position_ids, response_position_ids], dim=-1)
-        response_attention_mask = get_eos_mask(response_id=response, eos_token=eos_token_id, dtype=attention_mask.dtype)
+        if not self.config.agent.activate_agent:
+            response_attention_mask = get_eos_mask_multi_turn(response_id=response, pad_token_id=self.pad_token_id, dtype=attention_mask.dtype)
+        else:
+            response_attention_mask = get_eos_mask(response_id=response, eos_token=eos_token_id, dtype=attention_mask.dtype)
         attention_mask = torch.cat((attention_mask, response_attention_mask), dim=-1)
 
         # all the tp ranks should contain the same data here. data in all ranks are valid
@@ -272,8 +275,8 @@ class vLLMRollout(BaseRollout):
                 'position_ids': position_ids
             },
             batch_size=batch_size)
-        if action_mask is not None and reward is not None:
-            batch = batch.update({"action_mask": action_mask, "env_reward": reward})
+        if action_mask is not None and env_reward is not None:
+            batch = batch.update({"action_mask": action_mask, "env_reward": env_reward})
 
         # free vllm cache engine
         if vllm_version in ('0.3.1', '0.4.2', '0.5.4', '0.6.3') and self.config.free_cache_engine:
