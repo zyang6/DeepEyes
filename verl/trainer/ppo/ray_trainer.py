@@ -1028,6 +1028,10 @@ class RayPPOTrainer(object):
                         else:
                             batch.batch['token_level_rewards'] = batch.batch['token_level_scores']
 
+                        if 'env_reward' in batch.batch.keys():
+                            batch.batch['token_level_rewards'] += batch.batch['env_reward']
+                            print(f' [DEBUG] token_level_rewards={batch.batch["token_level_rewards"]}')
+
                         # compute advantages, executed on the driver process
                         batch = compute_advantage(batch,
                                                   adv_estimator=self.config.algorithm.adv_estimator,

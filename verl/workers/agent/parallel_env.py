@@ -8,12 +8,6 @@ from concurrent.futures import ThreadPoolExecutor
 from verl.utils.torch_functional import get_eos_mask, pad_2d_list_to_length
 from verl.workers.agent.tool_envs import ToolBase
 
-def _extract_tool_call_contents(start_token, end_token, text):
-    # pattern = r"<tool_call>(.*?)</tool_call>"
-    pattern = re.escape(start_token) + r'(.*?)' + re.escape(end_token)
-    matches = re.findall(pattern, text, re.DOTALL)
-    return matches
-
 def _concat_vllm_input(prompt_token_ids, response_token_ids):
     if isinstance(prompt_token_ids, torch.Tensor):
         return torch.cat([
@@ -67,11 +61,12 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, sampling_param
             use_tqdm=False
         )
         observations, rewards, dones, info = env.step(actions)
-        obs_token_ids = [obs['prompt_token_ids'] for obs in observations]
-        # TODO: support mm input in obs!!!
-        multi_modal_data = [obs['multi_modal_data'] for obs in observations]
+        # obs_token_ids = [obs['prompt_token_ids'] for obs in observations]
+        # # TODO: support mm input in obs!!!
+        # multi_modal_data = [obs['multi_modal_data'] for obs in observations]
 
-        for idx, obs, mm, act, rew, done in zip(active_indices, obs_token_ids, multi_modal_data, actions, rewards, dones):
+        # for idx, obs, mm, act, rew, done in zip(active_indices, obs_token_ids, multi_modal_data, actions, rewards, dones):
+        for idx, obs, act, rew, done in zip(active_indices, observations, actions, rewards, dones):
             if done:
                 active_mask[idx] = False
                 continue
@@ -88,20 +83,26 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, sampling_param
             action_mask = torch.ones_like(response_token_ids, dtype=torch.int64)
             running_action_masks[idx] = torch.cat([running_action_masks[idx], action_mask])
 
-            # if obs gets too long, truncated obs will be fed into the model
-            obs = obs[:config.agent.single_obs_max_length]
-            running_states[idx] = torch.cat([running_states[idx], obs])
-            vllm_input_list[idx]['prompt_token_ids'] = _concat_vllm_input(vllm_input_list[idx]['prompt_token_ids'], obs)
+            if 'prompt_token_ids' in obs:
+                obs_token_ids = obs['prompt_token_ids']
+                # if obs gets too long, truncated obs will be fed into the model
+                if len(obs_token_ids) > config.agent.single_obs_max_length:
+                    print("[WARNING] OBSERVATION TOO LONG, CONSIDER CHANGING YOUR CONFIG")
+                    obs_token_ids = obs_token_ids[:config.agent.single_obs_max_length]
+                running_states[idx] = torch.cat([running_states[idx], obs_token_ids])
+                vllm_input_list[idx]['prompt_token_ids'] = _concat_vllm_input(vllm_input_list[idx]['prompt_token_ids'], obs_token_ids)
+
+                obs_reward = torch.zeros(len(obs_token_ids), dtype=torch.float)
+                reward_tensor_list[idx] = torch.cat([reward_tensor_list[idx], obs_reward], dim=-1)
+
+                obs_mask = torch.zeros(len(obs_token_ids), dtype=torch.int64)
+                running_action_masks[idx] = torch.cat([running_action_masks[idx], obs_mask])
 
             # TODO: check whether the truncation is correct here
+            mm = obs['multi_modal_data']
             if 'multi_modal_data' in vllm_input_list[idx].keys() and 'image' in mm.keys():
                 vllm_input_list[idx]['multi_modal_data']['image'] += mm['image']
 
-            obs_reward = torch.zeros(len(obs), dtype=torch.float)
-            reward_tensor_list[idx] = torch.cat([reward_tensor_list[idx], obs_reward], dim=-1)
-
-            obs_mask = torch.zeros(len(obs), dtype=torch.int64)
-            running_action_masks[idx] = torch.cat([running_action_masks[idx], obs_mask])
             if running_states[idx].shape[-1] >= config.response_length:
                 active_mask[idx] = False
 
@@ -117,42 +118,50 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, sampling_param
     return state_tensor[:, -config.response_length:], action_mask_tensor, reward_tensor
 
 
-def execute_tool_call(sample, pbar=None):
-    action_list = sample.get('actions', [])
-    available_tools = sample.get('available_tools', [])
+def execute_tool_call(sample, tokenizer, pbar=None):
+    action_string = sample.get('action', '')
+    tool = sample.get('tool', None)
+    agent_meta = sample.get('agent_meta', {})
 
-    action_info_list = []
-    for action_string in zip(action_list):
-        try:
-            action_info = json.loads(action_string)
-            assert 'name' in action_info and 'arguments' in action_info
-            assert action_info['name'] in available_tools
-            action_info_list.append(action_info)
-        except Exception as err:
-            print(f' [ERROR] action json load {err=}')
-            continue
+    # non-agent data
+    if action_string == '' or tool is None:
+        return {}, 0.0, True
 
-    obs_list, reward_list = [], []
-    if len(action_info_list) > 0:
-        # openai/qwen25 style agent
-        for action_info in action_info_list:
-            target_tool = available_tools[action_info['name']]
-            tool_result, reward = target_tool.execute(action_info)
-    else:
-        # text style agent (e.g. games)
-        for key, tool in available_tools.items():
-            tool_result, reward = tool.execute(action_list)
-            obs_list += tool_result
-            reward_list += reward
+    tool_result, reward, done, info = tool.execute(action_string, meta=agent_meta)
+
+    # post-process
+    if not tool_result:
+        print(f' [WARNING] action={action_string} is not valid for tool={tool.name}')
+        tool_result_info = {}
+    elif isinstance(tool_result, dict):
+        # 1. tool return: {"prompt_token_ids: ..., "multi_modal_data": ...}
+        # TODO: Re-generate prompt_token_ids according to multi_modal_data
+        tool_result_info = tool_result
+    elif isinstance(tool_result, str) and len(tool_result) > 0:
+        # 2. tool return str
+        obs_token_ids = tokenizer.encode(tool_result)
+        tool_result_info = {"prompt_token_ids": obs_token_ids}
+    elif isinstance(tool_result, list) and len(tool_result) > 0 and isinstance(tool_result[0], str):
+        # 3. List[str], treated as openai/qwen style output
+        msg_list = [{"role": "tool", "content": res} for res in tool_result]
+        obs_token_ids = tokenizer.apply_chat_template(msg_list, add_generation_prompt=True, return_tensors='pt')[0]
+        # VERY UGLY: remove the system prompt added by qwen tokenizer
+        eos_start_idx = torch.nonzero(obs_token_ids == self.tokenizer.eos_token_id)
+        if eos_start_idx.shape[0] > 0:
+            eos_start_idx = eos_start_idx[0].item()
+            obs_token_ids = obs_token_ids[eos_start_idx + 1 : ]
+        else:
+            raise ValueError(f"tool [{tool.name}] returned type List[str] output must be in openai/qwen format : {tool_result}")
+        tool_result_info = {"prompt_token_ids": obs_token_ids}
 
     if pbar is not None:
         pbar.update(1)
-    return obs_list, reward_list
+    return tool_result_info, reward, done, info
 
 
 class ParallelEnv:
     """
-    The interface intentionally designed to be the same as: https://github.com/openai/gym
+    The interface intentionally designed to be the similar to : https://github.com/openai/gym
     Hope this could be easier to use for RLers.
     """
     def __init__(self, env_config, tokenizer, **kwargs):
@@ -178,98 +187,68 @@ class ParallelEnv:
         - dones: List[ Boolean ]
         - infos: Dict, for debugging only
         """
-        dones = []
+        obs_list = [{}] * len(actions)
+        reward_list = [0.0] * len(actions)
+        done_list = []
         valid_indices = []
         valid_actions = []
         
         # 1. filtering valid actions
         for idx, act in enumerate(actions):
             if act.outputs[0].finish_reason == 'length':
-                dones.append(True)
+                done_list.append(True)
                 continue
-
-            # NOTE: each agent response can have multiple function callings
-            # multiple agent responses can be executed asyncronously
-            action_text_list = _extract_tool_call_contents(
-                self.config.action_start, 
-                self.config.action_end, 
-                act.outputs[0].text
-            )
-            if len(action_text_list) == 0:
-                dones.append(True)
-                continue
-
-            dones.append(False)
+            done_list.append(False)
             valid_indices.append(idx)
-            valid_actions.append(action_text_list)
+            valid_actions.append(act.outputs[0].text)
 
         agent_inputs = []
-        for idx, actions in zip(valid_indices, valid_actions):
+        for idx, action in zip(valid_indices, valid_actions):
             agent_inputs.append(dict(
                 idx=idx,
-                actions=actions,
-                available_tools=self.tools[idx],
+                action=action,
+                tool=self.tools[idx],
                 agent_meta=self.agent_meta[idx],
             ))
 
-        # 2. executing actions
+        # 2. executing actions (sync or async)
         num_workers = min(self.config.concurrent_workers, len(valid_actions))
-        pbar = tqdm.tqdm(total=len(valid_actions), desc=f'Tool Calling on {num_workers=}') if self.config.show_tqdm else None
+        pbar = tqdm.tqdm(total=len(valid_actions), desc=f'Executing tool call on {num_workers} workers') if self.config.show_tqdm else None
         if num_workers <= 1:
-            agent_outputs = []
-            reward_outputs = []
             for agi in agent_inputs:
-                obs_list, reward_list = execute_tool_call(agi, pbar=pbar)
-                reward_sum = sum(reward_list) if len(reward_list) > 0 else 0.0
-                agent_outputs.append([{"role": "tool", "content": obs} for obs in obs_list])
-                reward_outputs.append(reward_sum)
+                obs, reward, done, info = execute_tool_call(agi, pbar=pbar)
+                obs_list[agi[idx]] = obs
+                reward_list[agi[idx]] = reward
+                done_list[agi[idx]] |= done
         else:
             partial_tool_func = partial(execute_tool_call, pbar=pbar)
             with ThreadPoolExecutor(max_workers=num_workers) as executor:
                 raw_outputs = list(executor.map(partial_tool_func, agent_inputs))
-            obs_list = [raw[0] for raw in raw_outputs]
-            reward_outputs = [sum(raw[1]) for raw in raw_outputs]
-            agent_outputs = [[{"role": "tool", "content": obs} for obs in obs_list]]
-        
-        # 3. post-process tool output
-        agent_output_final = [None] * len(actions)
-        reward_output_final = [None] * len(actions)
-        for idx, msg, rew in zip(valid_indices, agent_outputs, reward_outputs):
-            obs_token_ids = self.tokenizer.apply_chat_template(msg, add_generation_prompt=True, return_tensors='pt')[0]
-            # VERY UGLY: remove the system prompt added by qwen tokenizer
-            eos_start_idx = torch.nonzero(obs_token_ids == self.tokenizer.eos_token_id)
-            if eos_start_idx.shape[0] > 0:
-                eos_start_idx = eos_start_idx[0].item()
-                obs_token_ids = obs_token_ids[eos_start_idx : ]
-            agent_output_final[idx] = {"prompt_token_ids": obs_token_ids}
-            reward_output_final[idx] = rew
-        
-        return agent_output_tensors, reward_outputs, dones, {}
+            for agi, raw in zip(agent_inputs, raw_outputs):
+                obs, reward, done = raw[0], raw[1], raw[2]
+                obs_list[agi[idx]] = obs
+                reward_list[agi[idx]] = reward
+                done_list[agi[idx]] |= done
+
+        return obs_list, reward_list, done_list, {}
 
     def reset(self, prompts):
         self.tools = []
         self.agent_meta = []
         for i in range(len(prompts)):
             data_item = prompts[i]  # DataProtoItem
-            tool_names = data_item.non_tensor_batch.get(self.config.tool_name_key, '')
-            if tool_names:
-                # init tools from config field `tool_name_key`
-                tool_name_list = tool_names.split(',')
-                tool_name_list = [name.strip() for name in tool_name_list]
-                tool_fns = [ToolBase.create(name) for name in tool_name_list]
-                self.tools.append(dict(zip(tool_name_list, tool_fns)))
-            else:
-                # try initialize tools using system prompt description
-                raw_prompt = data_item.non_tensor_batch.get('raw_prompt', [])
-                if len(raw_prompt) and raw_prompt[0]['role'] == 'system':
-                    tool_fns = ToolBase.from_system_prompt(raw_prompt[0]['content'])
-                    tool_name_list = [tool.name for tool in tool_fns]
-                    self.tools.append(dict(zip(tool_name_list, tool_fns)))
-                else:
-                    self.tools.append({})
-
             tool_meta = data_item.non_tensor_batch.get(self.config.tool_meta_key, {})
             self.agent_meta.append(tool_meta)
+
+            tool_name = data_item.non_tensor_batch.get(self.config.tool_name_key, '')
+            if tool_name:
+                # init tools from config field `tool_name_key`
+                tool_fns = ToolBase.create(tool_name)
+                tool_fns.reset(tool_meta)
+                self.tools.append(tool_fns)
+            else:
+                # non-agent data
+                self.tools.append(None)
 
     def close(self):
         self.tools = []

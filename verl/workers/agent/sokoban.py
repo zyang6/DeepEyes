@@ -1,18 +1,42 @@
+import numpy as np
+import copy
+from typing import Optional, List
+
 import gymnasium as gym
 from gymnasium.envs.toy_text.frozen_lake import FrozenLakeEnv as GymFrozenLakeEnv
 from gymnasium.utils import seeding
-import numpy as np
-import copy
-from tool_envs import ToolBase
-from typing import Optional, List
+from tool_envs import ToolBase, extract_tool_call_contents
 
-class FrozenLakeTool(ToolBase):
-    name = "frozenlake"
-    
+class SokobanEnv(ToolBase):
+    name = "sokoban"
+
+    GRID_LOOKUP = {
+        0: " # \t",  # wall
+        1: " _ \t",  # floor
+        2: " O \t",  # target
+        3: " √ \t",  # box on target
+        4: " X \t",  # box
+        5: " P \t",  # player
+        6: " S \t",  # player on target
+        # Use tab separator to separate columns and \n\n to separate rows.
+    }
+
+    ACTION_LOOKUP = {
+        0: "None",
+        1: "Up",
+        2: "Down",
+        3: "Left",
+        4: "Right",
+    }
+
+    PENALTY_FOR_INVALID = -0.5
+    ACTION_START = '<answer>'
+    ACTION_END = '</answer>'
+
     def __init__(self, **kwargs):
         super().__init__(
             name=self.name,
-            description="A tool that simulates the Frozen Lake environment.",
+            description="A tool that simulates the Sokoban environment.",
             parameters={
                 "type": "object",
                 "properties": {
@@ -22,13 +46,12 @@ class FrozenLakeTool(ToolBase):
             }
         )
         self.env = None
-        #  GymFrozenLakeEnv(desc=generate_random_map(size=8, p=0.8, seed=44), is_slippery=True, render_mode="ansi")
-        self.env.reset()
-        self.reward = 0
+        self.GRID_LOOKUP_INV = {v : k for k, v in self.GRID_LOOKUP.items()}
+        self.ACTION_LOOKUP_INV = {v : k for k, v in self.ACTION_LOOKUP.items()}
 
-    def execute(self, *args, **kwargs) -> str:
+    def execute(self, action_string) -> str:
         """
-        Execute the tool functionality by taking an action in the Frozen Lake environment.
+        Execute the tool functionality by taking an action in the Sokoban environment.
         
         Args:
             action: The action to take (0: none, 1: left, 2: down, 3: right, 4: up)
@@ -38,8 +61,6 @@ class FrozenLakeTool(ToolBase):
             reward: The reward received after taking the action
         """
         action = kwargs.get("action", 0)
-        # if action == 0:
-        #     return self.env.render(), self.reward
         
         player_pos, reward, done, _, _ = self.env.step(action)
         self.reward = reward
@@ -49,12 +70,19 @@ class FrozenLakeTool(ToolBase):
         
         return self.env.render(), self.reward
 
-    def reset(self):
+    def reset(self, raw_prompt):
         """
         Reset the environment to its initial state.
         """
-        self.env.reset()
+        if self.env is not None:
+            self.env.close()
+            self.env = None
+
+        user_prompt = raw_prompt[0]['content']
+        init_map = extract_sokoban_map_from_input_prompt(user_prompt)
+        self.env = 
         self.reward = 0
+
 
 # Helper function to generate a random map for the Frozen Lake environment
 def generate_random_map(size: int = 8, p: float = 0.8, seed: Optional[int] = None) -> List[str]:
@@ -95,28 +123,6 @@ def generate_random_map(size: int = 8, p: float = 0.8, seed: Optional[int] = Non
         valid = is_valid(board, size)
     return ["".join(x) for x in board]
 
-# DFS to check that it's a valid path.
-def is_valid(board: List[List[str]], max_size: int) -> bool:
-    frontier, discovered = [], set()
-    # find the start point
-    start_r, start_c = np.where(np.array(board) == "S")
-    frontier.append((start_r[0], start_c[0]))
-    # dfs to check if there is a path from start to goal
-    while frontier:
-        r, c = frontier.pop()
-        if not (r, c) in discovered:
-            discovered.add((r, c))
-            directions = [(1, 0), (0, 1), (-1, 0), (0, -1)]
-            for x, y in directions:
-                r_new = r + x
-                c_new = c + y
-                if r_new < 0 or r_new >= max_size or c_new < 0 or c_new >= max_size:
-                    continue
-                if board[r_new][c_new] == "G":
-                    return True
-                if board[r_new][c_new] != "H":
-                    frontier.append((r_new, c_new))
-    return False
 
 # Example usage
 # action:[int]
