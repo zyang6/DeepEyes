@@ -8,7 +8,7 @@ from typing import Optional, List
 from PIL import Image
 
 class FrozenLakeTool(ToolBase):
-    name = "frozen_lake_tool"
+    name = "frozenlake"
     
     def __init__(self, **kwargs):
         super().__init__(
@@ -22,6 +22,7 @@ class FrozenLakeTool(ToolBase):
                 "required": ["action"]
             }
         )
+
         
         desc = kwargs.pop('desc', None)
         is_slippery = kwargs.pop('is_slippery', True)
