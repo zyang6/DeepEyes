@@ -36,7 +36,7 @@ class FrozenLakeTool(ToolBase):
             random_map = generate_random_map(size=size, p=p, seed=seed)
         else:
             random_map = np.asarray(copy.deepcopy(desc), dtype="c")
-        self.env = GymFrozenLakeEnv(desc=random_map, is_slippery=is_slippery)
+        self.env = GymFrozenLakeEnv(desc=random_map, is_slippery=is_slippery, render_mode=self.render_mode)
         self.reset()
 
         self.action_map = {
@@ -149,7 +149,7 @@ def gen_pil_image(rgb_array):
 
 if __name__ == "__main__":
     use_mm = False
-    tool = FrozenLakeTool(use_mm=use_mm, seed=44)
+    tool = FrozenLakeTool(use_mm=use_mm)
     observation, reward, done, info = tool.execute(action=1)
     print(tool.env.s)
     print(str(observation))
