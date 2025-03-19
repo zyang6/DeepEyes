@@ -5,6 +5,7 @@ import numpy as np
 import copy
 from tool_envs import ToolBase
 from typing import Optional, List
+from PIL import Image
 
 class FrozenLakeTool(ToolBase):
     name = "frozen_lake_tool"
@@ -21,32 +22,54 @@ class FrozenLakeTool(ToolBase):
                 "required": ["action"]
             }
         )
-        self.env = GymFrozenLakeEnv(desc=generate_random_map(size=8, p=0.8, seed=44), is_slippery=True, render_mode="ansi")
-        self.env.reset()
-        self.reward = 0
+        
+        desc = kwargs.pop('desc', None)
+        is_slippery = kwargs.pop('is_slippery', True)
+        size = kwargs.pop('size', 8)
+        p = kwargs.pop('p', 0.8)
+        seed = kwargs.pop('seed', None)
+        use_mm = kwargs.get("use_mm", False)
+
+        self.render_mode = 'rgb_array' if use_mm else 'ansi'
+        if desc is None:
+            random_map = generate_random_map(size=size, p=p, seed=seed)
+        else:
+            random_map = np.asarray(copy.deepcopy(desc), dtype="c")
+        self.env = GymFrozenLakeEnv(desc=random_map, is_slippery=is_slippery)
+        self.reset()
+
+        self.action_map = {
+            "left": 0,
+            "down": 1,
+            "right":2,
+            "up":3
+        }
 
     def execute(self, *args, **kwargs) -> str:
         """
         Execute the tool functionality by taking an action in the Frozen Lake environment.
         
         Args:
-            action: The action to take (0: none, 1: left, 2: down, 3: right, 4: up)
+            action: The action to take (0: left, 1: down, 2: right, 3: up)
             
         Returns:
-            observation: The current state of the environment
+            observation: The current state of the environment (str or rgb_array)
             reward: The reward received after taking the action
+            done: Game terminated or not
+            info: Additional info
         """
-        action = kwargs.get("action", 0)
-        # if action == 0:
-        #     return self.env.render(), self.reward
         
-        player_pos, reward, done, _, _ = self.env.step(action)
-        self.reward = reward
-        print(player_pos, reward, done)
-        if done:
-            self.reset()
+        action = kwargs.get("action", "non_valid")
+        if action in self.action_map:
+            action = self.action_map[action]
+        else:
+            return self.env.render(), 0, True, {}
         
-        return self.env.render(), self.reward
+        player_pos, self.reward, done, _, _ = self.env.step(action)
+        
+        return self.env.render(), self.reward, done, {}
+
+
 
     def reset(self):
         """
@@ -117,17 +140,22 @@ def is_valid(board: List[List[str]], max_size: int) -> bool:
                     frontier.append((r_new, c_new))
     return False
 
-# Example usage
-# action:[int]
-# LEFT = 0
-# DOWN = 1
-# RIGHT = 2
-# UP = 3
+def gen_pil_image(rgb_array):
+    pil_image = Image.fromarray(rgb_array)
+
+    pil_image.save('output_image.png')
+    pil_image.show()
+
 if __name__ == "__main__":
-    tool = FrozenLakeTool()
-    observation, reward = tool.execute(action=1)
+    use_mm = False
+    tool = FrozenLakeTool(use_mm=use_mm, seed=44)
+    observation, reward, done, info = tool.execute(action=1)
+    print(tool.env.s)
+    print(str(observation))
     print(f"Observation:\n{observation}")
     print(f"Reward: {reward}")
-    observation, reward = tool.execute(action=2)
+    if use_mm:
+        gen_pil_image(rgb_array=observation)
+    observation, reward, done, info = tool.execute(action=2)
     print(f"Observation:\n{observation}")
     print(f"Reward: {reward}")
