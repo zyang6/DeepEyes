@@ -3,7 +3,7 @@ from gymnasium.envs.toy_text.frozen_lake import FrozenLakeEnv as GymFrozenLakeEn
 from gymnasium.utils import seeding
 import numpy as np
 import copy
-from tool_envs import ToolBase
+from verl.workers.agent.tool_envs import ToolBase
 from typing import Optional, List
 from PIL import Image
 
@@ -70,7 +70,8 @@ class FrozenLakeTool(ToolBase):
         
         return self.env.render(), self.reward, done, {}
 
-
+    def render(self):
+        return self.env.render()
 
     def reset(self):
         """

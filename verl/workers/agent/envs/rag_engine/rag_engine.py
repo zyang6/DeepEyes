@@ -2,7 +2,7 @@ import random
 import requests
 import numpy as np
 from time import sleep
-from tool_envs import ToolBase, extract_tool_call_contents
+from verl.agent.tool_envs import ToolBase, extract_tool_call_contents
 
 class RAGEngineEnv(ToolBase):
     name = "rag"
