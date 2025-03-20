@@ -1,5 +1,4 @@
 import torch
-import deepcopy
 import numpy as np
 from tqdm import tqdm
 from functools import partial
@@ -20,15 +19,22 @@ def _concat_vllm_input(prompt_token_ids, response_token_ids):
             response_token_ids.unsqueeze(0).numpy()
         ], axis=-1)
 
-def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, sampling_params):
-    agent_sampling_params = sampling_params.copy()
+def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sampling_params):
+    agent_sampling_params = sampling_params.clone()
     agent_sampling_params.detokenize = True
     agent_sampling_params.skip_special_tokens = False
     agent_sampling_params.spaces_between_special_tokens = False
     agent_sampling_params.n = 1
+    agent_sampling_params.include_stop_str_in_output = True
 
-    env = ParallelEnv(config.agent, engine.tokenizer)
-    env.reset(vllm_inputs)
+    # support custom stop specified in dataset, like </search>, ```, etc.
+    custom_stop = config.agent.custom_stop
+    if custom_stop:
+        prev_stop = sampling_params.stop if sampling_params.stop else []
+        agent_sampling_params.stop = prev_stop + [custom_stop]
+
+    env = ParallelEnv(config.agent, tokenizer)
+    env.reset(prompts)
 
     batch_size = len(vllm_inputs)
     vllm_input_list = []
@@ -53,6 +59,7 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, sampling_param
         if sum(active_mask) == 0:
             break
 
+        print(f' [DEBUG 000] {step=}, total={batch_size}, n={sampling_params.n}, num_active={sum(active_mask)}')
         active_indices = [idx for idx, is_active in enumerate(active_mask) if is_active]
         active_vllm_input = [vinput for vinput, is_active in zip(vllm_input_list, active_mask) if is_active]
         actions = vllm_engine.generate(
@@ -82,6 +89,7 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, sampling_param
 
             action_mask = torch.ones_like(response_token_ids, dtype=torch.int64)
             running_action_masks[idx] = torch.cat([running_action_masks[idx], action_mask])
+            print(f' [DEBUG resp] resp_size={response_token_ids.shape[-1]}, total_size={running_states[idx].shape[-1]}')
 
             if 'prompt_token_ids' in obs:
                 obs_token_ids = obs['prompt_token_ids']
@@ -97,11 +105,15 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, sampling_param
 
                 obs_mask = torch.zeros(len(obs_token_ids), dtype=torch.int64)
                 running_action_masks[idx] = torch.cat([running_action_masks[idx], obs_mask])
+                print(f' [DEBUG obs] obs_size={len(obs_token_ids)}, total_size={running_states[idx].shape[-1]}')
 
             # TODO: check whether the truncation is correct here
             mm = obs['multi_modal_data']
-            if 'multi_modal_data' in vllm_input_list[idx].keys() and 'image' in mm.keys():
+            if 'image' in mm.keys():
+                if 'multi_modal_data' not in vllm_input_list[idx]:
+                    vllm_input_list[idx]['multi_modal_data'] = {"image": []}
                 vllm_input_list[idx]['multi_modal_data']['image'] += mm['image']
+                print(f' [DEBUG img] mm_image_size={len(mm["image"])}')
 
             if running_states[idx].shape[-1] >= config.response_length:
                 active_mask[idx] = False
@@ -110,7 +122,7 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, sampling_param
     max_total_length = config.prompt_length + config.response_length
     target_device = prompts.batch['input_ids'].device
     running_states = [state[: max_total_length] for state in running_states]
-    state_tensor = pad_2d_list_to_length(running_states, engine.tokenizer.pad_token_id, max_total_length).to(target_device)
+    state_tensor = pad_2d_list_to_length(running_states, tokenizer.pad_token_id, max_total_length).to(target_device)
     running_action_masks = [mask[: max_total_length] for mask in running_action_masks]
     action_mask_tensor = pad_2d_list_to_length(running_action_masks, 0, max_total_length).to(target_device)
     reward_tensor_list = [reward[: max_total_length] for reward in reward_tensor_list]
@@ -118,7 +130,7 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, sampling_param
     return state_tensor[:, -config.response_length:], action_mask_tensor, reward_tensor
 
 
-def execute_tool_call(sample, tokenizer, pbar=None):
+def execute_tool_call(sample, tokenizer=None, pbar=None):
     action_string = sample.get('action', '')
     tool = sample.get('tool', None)
     agent_meta = sample.get('agent_meta', {})
@@ -141,6 +153,8 @@ def execute_tool_call(sample, tokenizer, pbar=None):
         # 2. tool return str
         obs_token_ids = tokenizer.encode(tool_result)
         tool_result_info = {"prompt_token_ids": obs_token_ids}
+        print(f' [DEBUG rag] idx={sample["idx"]}, action={action_string}, tool_result={tool_result}, obs_size={len(obs_token_ids)}')
+
     elif isinstance(tool_result, list) and len(tool_result) > 0 and isinstance(tool_result[0], str):
         # 3. List[str], treated as openai/qwen style output
         msg_list = [{"role": "tool", "content": res} for res in tool_result]
@@ -213,15 +227,15 @@ class ParallelEnv:
 
         # 2. executing actions (sync or async)
         num_workers = min(self.config.concurrent_workers, len(valid_actions))
-        pbar = tqdm.tqdm(total=len(valid_actions), desc=f'Executing tool call on {num_workers} workers') if self.config.show_tqdm else None
+        pbar = tqdm(total=len(valid_actions), desc=f'Executing tool call on {num_workers} workers') if self.config.show_tqdm else None
         if num_workers <= 1:
             for agi in agent_inputs:
-                obs, reward, done, info = execute_tool_call(agi, pbar=pbar)
+                obs, reward, done, info = execute_tool_call(agi, self.tokenizer, pbar=pbar)
                 obs_list[agi[idx]] = obs
                 reward_list[agi[idx]] = reward
                 done_list[agi[idx]] |= done
         else:
-            partial_tool_func = partial(execute_tool_call, pbar=pbar)
+            partial_tool_func = partial(execute_tool_call, tokenizer=self.tokenizer, pbar=pbar)
             with ThreadPoolExecutor(max_workers=num_workers) as executor:
                 raw_outputs = list(executor.map(partial_tool_func, agent_inputs))
             for agi, raw in zip(agent_inputs, raw_outputs):

@@ -137,6 +137,8 @@ class vLLMRollout(BaseRollout):
         self.sampling_params = SamplingParams(**kwargs)
         self.pad_token_id = tokenizer.pad_token_id
 
+        self.tokenizer = tokenizer
+
     @contextmanager
     def update_sampling_params(self, **kwargs):
         # update sampling params
@@ -211,11 +213,12 @@ class vLLMRollout(BaseRollout):
         with self.update_sampling_params(**kwargs):
             if self.config.agent.activate_agent:
                 response, action_mask, env_reward = agent_rollout_loop(
-                    self.config,
-                    self.inference_engine,
-                    vllm_inputs, 
-                    prompts,
-                    self.sampling_params)
+                    config=self.config,
+                    tokenizer=self.tokenizer,
+                    vllm_engine=self.inference_engine,
+                    vllm_inputs=vllm_inputs, 
+                    prompts=prompts,
+                    sampling_params=self.sampling_params)
                 
             else:
                 outputs = self.inference_engine.generate(

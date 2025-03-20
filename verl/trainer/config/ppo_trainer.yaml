@@ -107,7 +107,8 @@ actor_rollout_ref:
       concurrent_workers: 16
       tool_name_key: data_source
       tool_meta_key: raw_prompt
-      tool_desc_start: <tool>
+      custom_stop: </search>
+      tool_desc_start: <tool> # 本来是给qwen/openai格式预留的，感觉没什么用，下版本删除
       tool_desc_end: </tool>
       show_tqdm: True
 
