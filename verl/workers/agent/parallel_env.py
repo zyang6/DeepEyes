@@ -11,7 +11,7 @@ def _concat_vllm_input(prompt_token_ids, response_token_ids):
     if isinstance(prompt_token_ids, torch.Tensor):
         return torch.cat([
             prompt_token_ids,
-            response_token_ids.unsqueeze(0)
+            response_token_ids.unsqueeze(0).to(prompt_token_ids.device)
         ], dim=-1)
     else:
         return np.concatenate([
@@ -79,20 +79,21 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
                 continue
 
             # process response token ids
-            response_token_ids = torch.tensor(act.outputs[0].token_ids, dtype=torch.int64)
+            response_token_ids = torch.tensor(act.outputs[0].token_ids, dtype=torch.int64, device=running_states[idx].device)
             running_states[idx] = torch.cat([running_states[idx], response_token_ids])
             vllm_input_list[idx]['prompt_token_ids'] = _concat_vllm_input(vllm_input_list[idx]['prompt_token_ids'], response_token_ids)
 
-            action_reward = torch.zeros_like(response_token_ids, dtype=torch.float)
+            action_reward = torch.zeros_like(response_token_ids, dtype=torch.float, device=reward_tensor_list[idx].device)
             reward_tensor_list[idx] = torch.cat([reward_tensor_list[idx], action_reward])
             reward_tensor_list[idx][-1] += rew
 
-            action_mask = torch.ones_like(response_token_ids, dtype=torch.int64)
+            action_mask = torch.ones_like(response_token_ids, dtype=torch.int64, device=running_action_masks[idx].device)
             running_action_masks[idx] = torch.cat([running_action_masks[idx], action_mask])
             print(f' [DEBUG resp] resp_size={response_token_ids.shape[-1]}, total_size={running_states[idx].shape[-1]}')
 
+            # process obs tokens and images
             if 'prompt_token_ids' in obs:
-                obs_token_ids = obs['prompt_token_ids']
+                obs_token_ids = obs['prompt_token_ids'].to(running_states[idx].device)
                 # if obs gets too long, truncated obs will be fed into the model
                 if len(obs_token_ids) > config.agent.single_obs_max_length:
                     print("[WARNING] OBSERVATION TOO LONG, CONSIDER CHANGING YOUR CONFIG")
@@ -100,15 +101,15 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
                 running_states[idx] = torch.cat([running_states[idx], obs_token_ids])
                 vllm_input_list[idx]['prompt_token_ids'] = _concat_vllm_input(vllm_input_list[idx]['prompt_token_ids'], obs_token_ids)
 
-                obs_reward = torch.zeros(len(obs_token_ids), dtype=torch.float)
+                obs_reward = torch.zeros(len(obs_token_ids), dtype=torch.float, device=reward_tensor_list[idx].device)
                 reward_tensor_list[idx] = torch.cat([reward_tensor_list[idx], obs_reward], dim=-1)
 
-                obs_mask = torch.zeros(len(obs_token_ids), dtype=torch.int64)
+                obs_mask = torch.zeros(len(obs_token_ids), dtype=torch.int64, device=running_action_masks[idx].device)
                 running_action_masks[idx] = torch.cat([running_action_masks[idx], obs_mask])
                 print(f' [DEBUG obs] obs_size={len(obs_token_ids)}, total_size={running_states[idx].shape[-1]}')
 
             # TODO: check whether the truncation is correct here
-            mm = obs['multi_modal_data']
+            mm = obs.get('multi_modal_data', {})
             if 'image' in mm.keys():
                 if 'multi_modal_data' not in vllm_input_list[idx]:
                     vllm_input_list[idx]['multi_modal_data'] = {"image": []}
@@ -134,6 +135,7 @@ def execute_tool_call(sample, tokenizer=None, pbar=None):
     action_string = sample.get('action', '')
     tool = sample.get('tool', None)
     agent_meta = sample.get('agent_meta', {})
+    # print(f' [DEBUG rag input] {sample["idx"]=}, {action_string=}, {tool=}, agent_meta={agent_meta}')
 
     # non-agent data
     if action_string == '' or tool is None:
@@ -153,7 +155,7 @@ def execute_tool_call(sample, tokenizer=None, pbar=None):
         # 2. tool return str
         obs_token_ids = tokenizer.encode(tool_result)
         tool_result_info = {"prompt_token_ids": obs_token_ids}
-        print(f' [DEBUG rag] idx={sample["idx"]}, action={action_string}, tool_result={tool_result}, obs_size={len(obs_token_ids)}')
+        # print(f' [DEBUG rag output] {tool_result=}, {len(obs_token_ids)=}')
 
     elif isinstance(tool_result, list) and len(tool_result) > 0 and isinstance(tool_result[0], str):
         # 3. List[str], treated as openai/qwen style output
@@ -167,6 +169,8 @@ def execute_tool_call(sample, tokenizer=None, pbar=None):
         else:
             raise ValueError(f"tool [{tool.name}] returned type List[str] output must be in openai/qwen format : {tool_result}")
         tool_result_info = {"prompt_token_ids": obs_token_ids}
+    else:
+        raise ValueError(f"Invalid tool_result type: {type(tool_result)=} -- {tool_result}")
 
     if pbar is not None:
         pbar.update(1)
@@ -230,29 +234,36 @@ class ParallelEnv:
         pbar = tqdm(total=len(valid_actions), desc=f'Executing tool call on {num_workers} workers') if self.config.show_tqdm else None
         if num_workers <= 1:
             for agi in agent_inputs:
+                subidx = agi['idx']
                 obs, reward, done, info = execute_tool_call(agi, self.tokenizer, pbar=pbar)
-                obs_list[agi[idx]] = obs
-                reward_list[agi[idx]] = reward
-                done_list[agi[idx]] |= done
+                obs_list[subidx] = obs
+                reward_list[subidx] = reward
+                done_list[subidx] |= done
         else:
             partial_tool_func = partial(execute_tool_call, tokenizer=self.tokenizer, pbar=pbar)
             with ThreadPoolExecutor(max_workers=num_workers) as executor:
                 raw_outputs = list(executor.map(partial_tool_func, agent_inputs))
             for agi, raw in zip(agent_inputs, raw_outputs):
                 obs, reward, done = raw[0], raw[1], raw[2]
-                obs_list[agi[idx]] = obs
-                reward_list[agi[idx]] = reward
-                done_list[agi[idx]] |= done
+                subidx = agi['idx']
+                obs_list[subidx] = obs
+                reward_list[subidx] = reward
+                done_list[subidx] |= done
 
         return obs_list, reward_list, done_list, {}
 
     def reset(self, prompts):
         self.tools = []
         self.agent_meta = []
+        print(f' [DEBUG reset] {prompts.batch.keys()=}, {prompts.non_tensor_batch.keys()=}, {prompts.meta_info.keys()=}')
         for i in range(len(prompts)):
             data_item = prompts[i]  # DataProtoItem
-            tool_meta = data_item.non_tensor_batch.get(self.config.tool_meta_key, {})
-            self.agent_meta.append(tool_meta)
+
+            if self.config.tool_meta_key:
+                tool_meta = data_item.non_tensor_batch.get(self.config.tool_meta_key, None)
+            else:
+                tool_meta = None
+            self.agent_meta.append(None)
 
             tool_name = data_item.non_tensor_batch.get(self.config.tool_name_key, '')
             if tool_name:
