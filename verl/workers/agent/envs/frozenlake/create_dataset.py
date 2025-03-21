@@ -25,7 +25,7 @@ FrozenLake Quick Guide
 Goal: Reach the goal (G).
 
 Symbols:
-F Frozen | H Hole | G Goal | S Start | P Player
+F Frozen | H Hole | G Goal | P Player
 
 Rules:
 1. Avoid falling into holes (H).
@@ -44,7 +44,6 @@ The episode ends if the following happens:
 1. You moves into a hole.
 2. You reaches the goal. 
 
-[Observations]:
 {observation}
 Decide the next action:\
 """
@@ -67,13 +66,14 @@ def main():
     
     size, p = os.environ.get("SIZE"), os.environ.get("P")
     size, p = int(size), float(p)
+    use_mm = args.use_mm
 
 
     # Generate instruction
     seeds = range(args.seed, args.seed + args.train_size + args.test_size)
     instructions = []
     for seed in seeds:
-        env = FrozenLakeTool(size=size, p=p, seed=seed)
+        env = FrozenLakeTool(size=size, p=p, seed=seed, use_mm=use_mm, _name=None, _desc=None, _params=None)
         observation = env.render()
         instruction = intro.format(observation=observation)
         instructions.append(instruction)

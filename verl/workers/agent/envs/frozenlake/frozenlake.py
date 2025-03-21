@@ -8,10 +8,13 @@ from typing import Optional, List
 from PIL import Image
 import re 
 
+# 临时修复
+# ToolBase.registry = {}
+
 class FrozenLakeTool(ToolBase):
     name = "frozenlake"
     
-    def __init__(self, **kwargs):
+    def __init__(self, _name, _desc, _params, **kwargs):
         super().__init__(
             name=self.name,
             description="A tool that simulates the Frozen Lake environment.",
@@ -65,25 +68,17 @@ class FrozenLakeTool(ToolBase):
         if action in self.action_map:
             action = self.action_map[action]
         else:
-            print("action is not valid")
-            return self.env.render(), 0, True, {}
+            print(f"action is not valid")
+            return self.render(), 0, True, {}
         
         player_pos, self.reward, done, _, _ = self.env.step(action)
         print(f"position{player_pos}")
-        if self.render_mode == "rgb_array":
-            obs = self.render()
-        else:
-            origin_obs = self.render()
-            if isinstance(origin_obs, str):
-                obs = self.obs_transform(origin_obs, player_pos)
-                obs = "Your Observation\n" + obs
+        obs = self.render()
 
         return obs, self.reward, done, {}
 
-    def obs_transform(self, origin_obs, player_pos):
-        row, col = player_pos // self.env.ncol, player_pos % self.env.ncol
-
-
+    def obs_transform(self, origin_obs):
+        row, col = self.env.s // self.env.ncol, self.env.s % self.env.ncol
         def remove_ansi(text):
             #  match the ANSI and remove
             ansi_pattern = re.compile(r'\033\[[0-9;]*m')
@@ -91,14 +86,23 @@ class FrozenLakeTool(ToolBase):
         text_obs = remove_ansi(origin_obs)
         lines = text_obs.strip().split("\n")
         grid = [list(line) for line in lines]
-        grid[row + 1][col] = "P"
+        if len(grid) != len(grid[0]):
+            grid = grid[1:][:]
+        grid[row][col] = "P"
         obs = "\n".join(" ".join(row) for row in grid)
         return obs
 
     def render(self):
-        return self.env.render()
+        if self.render_mode == "rgb_array":
+            obs = self.env.render()
+        else:
+            origin_obs = self.env.render()
+            if isinstance(origin_obs, str):
+                obs = self.obs_transform(origin_obs)
+                obs = "[Observations]:\n" + obs
+        return obs
 
-    def reset(self):
+    def reset(self, *args, **kwargs):
         """
         Reset the environment to its initial state.
         """
@@ -175,7 +179,7 @@ def gen_pil_image(rgb_array):
 
 if __name__ == "__main__":
     use_mm = False
-    tool = FrozenLakeTool(use_mm=use_mm, size=4, is_slippery=False)
+    tool = FrozenLakeTool(_name=None, _desc=None, _params=None, use_mm=use_mm, size=4, is_slippery=False)
     observation, reward, done, info = tool.execute(action="left")
     print(observation, reward, done)
     if not done:
