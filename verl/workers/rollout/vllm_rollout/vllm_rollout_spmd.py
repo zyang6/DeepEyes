@@ -261,7 +261,7 @@ class vLLMRollout(BaseRollout):
         # position_ids:   [0,0,0,0,0,1,2,3, | 4,5,6,7,8,9,10,11]
         response_position_ids = position_ids[:, -1:] + delta_position_id
         position_ids = torch.cat([position_ids, response_position_ids], dim=-1)
-        if not self.config.agent.activate_agent:
+        if self.config.agent.activate_agent:
             response_attention_mask = get_eos_mask_multi_turn(response_id=response, pad_token_id=self.pad_token_id, dtype=attention_mask.dtype)
         else:
             response_attention_mask = get_eos_mask(response_id=response, eos_token=eos_token_id, dtype=attention_mask.dtype)
