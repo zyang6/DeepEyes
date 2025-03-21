@@ -20,7 +20,7 @@ class RAGEngineEnv(ToolBase):
     def execute(self, action_string, **kwargs):
         answers = extract_tool_call_contents(self.answer_start, self.answer_end, action_string)
         if answers:
-            print(f' [DEBUG] found answer in {action_string=}')
+            # print(f' [DEBUG] found answer in {action_string=}')
             return '', 0.0, True, {}
 
         action_list = extract_tool_call_contents(self.action_start, self.action_end, action_string)
@@ -34,8 +34,8 @@ class RAGEngineEnv(ToolBase):
             return 'SEARCH RESULT IS EMPTY', 0.0, False, search_results
 
         assert len(action_list) == len(search_results['result']), f'{action_list=}, {len(search_results["result"])=}'
-        doc_string = self._passages2string(action_list, search_results['result']).strip()
-        docs_string = f"\n<information>\n{doc_string}\n</information>\n"
+        doc_string = self._passages2string(action_list, search_results['result'])
+        docs_string = f"\n\n<information>{doc_string}</information>\n\n"
         return docs_string, 0.0, False, search_results
 
     def reset(self, *args, **kwargs):
@@ -66,7 +66,7 @@ class RAGEngineEnv(ToolBase):
                 content = doc_item['document']['contents']
                 title = content.split("\n")[0]
                 text = "\n".join(content.split("\n")[1:])
-                format_reference += f"Doc {idx+1}\nKeyword: {key}\nTitle: {title}\nContent: {text}"
-                format_reference += '\n\n'
+                # format_reference += f"Doc {idx+1}\nKeyword: {key}\nTitle: {title}\nContent: {text}"
+                format_reference += f"Doc {idx+1}(Title: {title}) {text}\n"
 
         return format_reference

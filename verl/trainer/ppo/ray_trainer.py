@@ -248,7 +248,7 @@ def _compute_response_info(batch):
     response_length = response_mask.sum(-1).float()  # (batch_size,)
 
     if 'action_mask' in batch.batch:
-        action_mask = batch.batch['action_mask'][:, -response_length:]
+        action_mask = batch.batch['action_mask'][:, -batch.batch['responses'].shape[-1]:]
         obs_mask = response_mask * (1 - action_mask)
         obs_length = obs_mask.sum(-1).float()
     else:
@@ -680,7 +680,7 @@ class RayPPOTrainer(object):
 
             if self.config.actor_rollout_ref.rollout.agent.activate_agent:
                 tool_name_key = self.config.actor_rollout_ref.rollout.agent.tool_name_key
-                if tool_name_key:
+                if tool_name_key and tool_name_key in test_batch.non_tensor_batch.keys():
                     test_gen_batch.non_tensor_batch[tool_name_key] = test_batch.non_tensor_batch[tool_name_key]
 
             test_gen_batch.meta_info = {
@@ -959,7 +959,7 @@ class RayPPOTrainer(object):
                 print(f' [DEBUG config] config={self.config.actor_rollout_ref.rollout.agent}')
                 if self.config.actor_rollout_ref.rollout.agent.activate_agent:
                     tool_name_key = self.config.actor_rollout_ref.rollout.agent.tool_name_key
-                    if tool_name_key:
+                    if tool_name_key and tool_name_key in batch.non_tensor_batch.keys():
                         gen_batch.non_tensor_batch[tool_name_key] = batch.non_tensor_batch[tool_name_key]
                         print(f' [DEBUG trainer] {gen_batch.non_tensor_batch.keys()=}')
 
@@ -1041,8 +1041,9 @@ class RayPPOTrainer(object):
                             batch.batch['token_level_rewards'] = batch.batch['token_level_scores']
 
                         if 'env_reward' in batch.batch.keys():
+                            print(f' [DEBUG reward] rewards_before={batch.batch["token_level_rewards"].mean().item()}')
                             batch.batch['token_level_rewards'] += batch.batch['env_reward']
-                            print(f' [DEBUG] token_level_rewards={batch.batch["token_level_rewards"]}')
+                            print(f' [DEBUG reward] rewards_after={batch.batch["token_level_rewards"].mean().item()}')
 
                         # compute advantages, executed on the driver process
                         batch = compute_advantage(batch,

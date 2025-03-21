@@ -11,12 +11,12 @@ def _concat_vllm_input(prompt_token_ids, response_token_ids):
     if isinstance(prompt_token_ids, torch.Tensor):
         return torch.cat([
             prompt_token_ids,
-            response_token_ids.unsqueeze(0).to(prompt_token_ids.device)
+            response_token_ids.to(prompt_token_ids.device),
         ], dim=-1)
     else:
         return np.concatenate([
             prompt_token_ids,
-            response_token_ids.unsqueeze(0).numpy()
+            response_token_ids.cpu().numpy(),
         ], axis=-1)
 
 def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sampling_params):
@@ -30,11 +30,13 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
     # support custom stop specified in dataset, like </search>, ```, etc.
     custom_stop = config.agent.custom_stop
     if custom_stop:
+        if isinstance(custom_stop, str):
+            custom_stop = [custom_stop]
         prev_stop = sampling_params.stop if sampling_params.stop else []
-        agent_sampling_params.stop = prev_stop + [custom_stop]
+        agent_sampling_params.stop = prev_stop + custom_stop
 
     env = ParallelEnv(config.agent, tokenizer)
-    env.reset(prompts)
+    env.reset(prompts, n=sampling_params.n)
 
     batch_size = len(vllm_inputs)
     vllm_input_list = []
@@ -56,10 +58,10 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
             active_mask.append(True)
 
     for step in range(config.agent.max_turns):
+        print(f' [DEBUG 000] {step=}, total={batch_size}, n={sampling_params.n}, num_active={sum(active_mask)}')
         if sum(active_mask) == 0:
             break
 
-        print(f' [DEBUG 000] {step=}, total={batch_size}, n={sampling_params.n}, num_active={sum(active_mask)}')
         active_indices = [idx for idx, is_active in enumerate(active_mask) if is_active]
         active_vllm_input = [vinput for vinput, is_active in zip(vllm_input_list, active_mask) if is_active]
         actions = vllm_engine.generate(
@@ -89,7 +91,7 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
 
             action_mask = torch.ones_like(response_token_ids, dtype=torch.int64, device=running_action_masks[idx].device)
             running_action_masks[idx] = torch.cat([running_action_masks[idx], action_mask])
-            print(f' [DEBUG resp] resp_size={response_token_ids.shape[-1]}, total_size={running_states[idx].shape[-1]}')
+            # print(f' [DEBUG resp] resp_size={response_token_ids.shape[-1]}, total_size={running_states[idx].shape[-1]}')
 
             # process obs tokens and images
             if 'prompt_token_ids' in obs:
@@ -98,6 +100,7 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
                 if len(obs_token_ids) > config.agent.single_obs_max_length:
                     print("[WARNING] OBSERVATION TOO LONG, CONSIDER CHANGING YOUR CONFIG")
                     obs_token_ids = obs_token_ids[:config.agent.single_obs_max_length]
+
                 running_states[idx] = torch.cat([running_states[idx], obs_token_ids])
                 vllm_input_list[idx]['prompt_token_ids'] = _concat_vllm_input(vllm_input_list[idx]['prompt_token_ids'], obs_token_ids)
 
@@ -106,7 +109,7 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
 
                 obs_mask = torch.zeros(len(obs_token_ids), dtype=torch.int64, device=running_action_masks[idx].device)
                 running_action_masks[idx] = torch.cat([running_action_masks[idx], obs_mask])
-                print(f' [DEBUG obs] obs_size={len(obs_token_ids)}, total_size={running_states[idx].shape[-1]}')
+                # print(f' [DEBUG obs] obs_size={len(obs_token_ids)}, total_size={running_states[idx].shape[-1]}')
 
             # TODO: check whether the truncation is correct here
             mm = obs.get('multi_modal_data', {})
@@ -128,6 +131,7 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
     action_mask_tensor = pad_2d_list_to_length(running_action_masks, 0, max_total_length).to(target_device)
     reward_tensor_list = [reward[: max_total_length] for reward in reward_tensor_list]
     reward_tensor = pad_2d_list_to_length(reward_tensor_list, 0.0, max_total_length).to(target_device)
+    reward_tensor = reward_tensor[:, -config.response_length: ]
     return state_tensor[:, -config.response_length:], action_mask_tensor, reward_tensor
 
 
@@ -145,16 +149,17 @@ def execute_tool_call(sample, tokenizer=None, pbar=None):
 
     # post-process
     if not tool_result:
-        print(f' [WARNING] action={action_string} is not valid for tool={tool.name}')
+        # print(f' [WARNING] {action_string=} is not valid for tool={tool.name}')
         tool_result_info = {}
     elif isinstance(tool_result, dict):
         # 1. tool return: {"prompt_token_ids: ..., "multi_modal_data": ...}
         # TODO: Re-generate prompt_token_ids according to multi_modal_data
         tool_result_info = tool_result
+
     elif isinstance(tool_result, str) and len(tool_result) > 0:
         # 2. tool return str
         obs_token_ids = tokenizer.encode(tool_result)
-        tool_result_info = {"prompt_token_ids": obs_token_ids}
+        tool_result_info = {"prompt_token_ids": torch.tensor(obs_token_ids)}
         # print(f' [DEBUG rag output] {tool_result=}, {len(obs_token_ids)=}')
 
     elif isinstance(tool_result, list) and len(tool_result) > 0 and isinstance(tool_result[0], str):
@@ -168,6 +173,8 @@ def execute_tool_call(sample, tokenizer=None, pbar=None):
             obs_token_ids = obs_token_ids[eos_start_idx + 1 : ]
         else:
             raise ValueError(f"tool [{tool.name}] returned type List[str] output must be in openai/qwen format : {tool_result}")
+        if not isinstance(obs_token_ids, torch.Tensor):
+            obs_token_ids = torch.tensor(obs_token_ids)
         tool_result_info = {"prompt_token_ids": obs_token_ids}
     else:
         raise ValueError(f"Invalid tool_result type: {type(tool_result)=} -- {tool_result}")
@@ -252,28 +259,43 @@ class ParallelEnv:
 
         return obs_list, reward_list, done_list, {}
 
-    def reset(self, prompts):
+    def reset(self, prompts, n=1):
         self.tools = []
         self.agent_meta = []
         print(f' [DEBUG reset] {prompts.batch.keys()=}, {prompts.non_tensor_batch.keys()=}, {prompts.meta_info.keys()=}')
+
+        reset_output_list = []
         for i in range(len(prompts)):
-            data_item = prompts[i]  # DataProtoItem
+            for _ in range(n):
+                data_item = prompts[i]  # DataProtoItem
 
-            if self.config.tool_meta_key:
-                tool_meta = data_item.non_tensor_batch.get(self.config.tool_meta_key, None)
-            else:
-                tool_meta = None
-            self.agent_meta.append(None)
+                if self.config.tool_meta_key:
+                    tool_meta = data_item.non_tensor_batch.get(self.config.tool_meta_key, None)
+                else:
+                    tool_meta = None
+                self.agent_meta.append(tool_meta)
 
-            tool_name = data_item.non_tensor_batch.get(self.config.tool_name_key, '')
-            if tool_name:
-                # init tools from config field `tool_name_key`
-                tool_fns = ToolBase.create(tool_name)
-                tool_fns.reset(tool_meta)
-                self.tools.append(tool_fns)
-            else:
-                # non-agent data
-                self.tools.append(None)
+                tool_name = data_item.non_tensor_batch.get(self.config.tool_name_key, '')
+                if tool_name:
+                    # init tools from config field `tool_name_key`
+                    tool_fns = ToolBase.create(tool_name)
+                    reset_output = tool_fns.reset(tool_meta)
+                    self.tools.append(tool_fns)
+                    reset_output_list.append(reset_output)
+                else:
+                    # non-agent data
+                    self.tools.append(None)
+                    reset_output_list.append(None)
+
+        # NOTE: pop agent keys to prevent batch_size mismatch when n>1
+        if self.config.tool_name_key and self.config.tool_name_key in prompts.non_tensor_batch.keys():
+            prompts.non_tensor_batch.pop(self.config.tool_name_key)
+            print(f' [DEBUG tools] non_gensor_batch pop key={self.config.tool_name_key}')
+        if self.config.tool_meta_key and self.config.tool_meta_key in prompts.non_tensor_batch.keys():
+            prompts.non_tensor_batch.pop(self.config.tool_meta_key)
+            print(f' [DEBUG tools] non_gensor_batch pop key={self.config.tool_meta_key}')
+        print(f' [DEBUG tools] {len(self.tools)=}, {len(self.agent_meta)=}')
+        return reset_output_list
 
     def close(self):
         self.tools = []
