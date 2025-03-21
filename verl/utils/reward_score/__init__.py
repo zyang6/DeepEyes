@@ -40,7 +40,8 @@ def _default_compute_score(data_source, solution_str, ground_truth, extra_info=N
 
     elif data_source in ['rag']:
         from . import agent
-        res = agent.compute_score(data_source, solution_str, ground_truth)
+        ground_truth_str = str(ground_truth['target'].tolist()[0])
+        res = agent.compute_score(data_source, solution_str, ground_truth_str)
 
     else:
         raise NotImplementedError

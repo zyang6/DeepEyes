@@ -76,10 +76,6 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
 
         # for idx, obs, mm, act, rew, done in zip(active_indices, obs_token_ids, multi_modal_data, actions, rewards, dones):
         for idx, obs, act, rew, done in zip(active_indices, observations, actions, rewards, dones):
-            if done:
-                active_mask[idx] = False
-                continue
-
             # process response token ids
             response_token_ids = torch.tensor(act.outputs[0].token_ids, dtype=torch.int64, device=running_states[idx].device)
             running_states[idx] = torch.cat([running_states[idx], response_token_ids])
@@ -119,7 +115,7 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
                 vllm_input_list[idx]['multi_modal_data']['image'] += mm['image']
                 print(f' [DEBUG img] mm_image_size={len(mm["image"])}')
 
-            if running_states[idx].shape[-1] >= config.response_length:
+            if done or running_states[idx].shape[-1] >= config.prompt_length + config.response_length:
                 active_mask[idx] = False
 
     env.close()
