@@ -1,7 +1,7 @@
 set -x
 
 # export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
-export DATA_DIR=/cpfs/user/fengyuan/code/github/verl/data/nq_hotpot
+export DATA_DIR=/cpfs/user/fengyuan/verl_data/nq_hotpot
 export OUTPUT_DIR=/cpfs/user/fengyuan/code/github/verl/checkpoints
 
 PROJECT_NAME="agent_ppo_debug"
@@ -19,12 +19,11 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     data.train_batch_size=512 \
     data.max_prompt_length=4096 \
     data.max_response_length=4096 \
-    data.return_raw_chat=True \
     algorithm.adv_estimator=gae \
     algorithm.lam=0.999 \
+    algorithm.kl_ctrl.kl_coef=0.001 \
     actor_rollout_ref.model.path=${BASE_MODEL} \
     actor_rollout_ref.actor.optim.lr=1e-6 \
-    actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.actor.optim.lr_warmup_steps_ratio=0.95 \
     actor_rollout_ref.actor.ppo_mini_batch_size=128 \
@@ -41,6 +40,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.temperature=1 \
     actor_rollout_ref.rollout.free_cache_engine=True \
     actor_rollout_ref.rollout.agent.activate_agent=True \
+    actor_rollout_ref.rollout.agent.tool_name_key=env_name \
     actor_rollout_ref.rollout.agent.single_obs_max_length=2048 \
     actor_rollout_ref.rollout.agent.max_turns=8 \
     actor_rollout_ref.rollout.agent.concurrent_workers=4 \
@@ -48,13 +48,11 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     critic.model.use_remove_padding=True \
     critic.optim.lr_warmup_steps_ratio=0.05 \
     critic.model.path=${BASE_MODEL} \
-    critic.model.enable_gradient_checkpointing=True \
     critic.ppo_micro_batch_size_per_gpu=2 \
     critic.model.fsdp_config.param_offload=True \
     critic.model.fsdp_config.optimizer_offload=True \
-    algorithm.kl_ctrl.kl_coef=0.001 \
     trainer.critic_warmup=0 \
-    trainer.logger=['console'] \
+    trainer.logger=['console','wandb'] \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=${WORLD_SIZE} \
     trainer.save_freq=16 \

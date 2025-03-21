@@ -678,6 +678,11 @@ class RayPPOTrainer(object):
                     non_tensor_batch_keys=['raw_prompt_ids'],
                 )
 
+            if self.config.actor_rollout_ref.rollout.agent.activate_agent:
+                tool_name_key = self.config.actor_rollout_ref.rollout.agent.tool_name_key
+                if tool_name_key:
+                    test_gen_batch.non_tensor_batch[tool_name_key] = test_batch.non_tensor_batch[tool_name_key]
+
             test_gen_batch.meta_info = {
                 'eos_token_id': self.tokenizer.eos_token_id,
                 'pad_token_id': self.tokenizer.pad_token_id,
@@ -950,6 +955,13 @@ class RayPPOTrainer(object):
                         batch_keys=['input_ids', 'attention_mask', 'position_ids'],
                         non_tensor_batch_keys=['raw_prompt_ids'],
                     )
+
+                print(f' [DEBUG config] config={self.config.actor_rollout_ref.rollout.agent}')
+                if self.config.actor_rollout_ref.rollout.agent.activate_agent:
+                    tool_name_key = self.config.actor_rollout_ref.rollout.agent.tool_name_key
+                    if tool_name_key:
+                        gen_batch.non_tensor_batch[tool_name_key] = batch.non_tensor_batch[tool_name_key]
+                        print(f' [DEBUG trainer] {gen_batch.non_tensor_batch.keys()=}')
 
                 is_last_step = self.global_steps >= self.total_training_steps
 

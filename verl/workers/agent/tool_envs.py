@@ -31,7 +31,7 @@ class ToolMeta(type):
 class ToolBase(metaclass=ToolMeta):
     registry = {}  # 全局注册表
 
-    def __init__(self, name: str, description: str = '', parameters: Dict = None, **kwargs):
+    def __init__(self, name: str, description: str = '', parameters: Dict = {}, **kwargs):
         """
         Code adapted from: https://github.com/0russwest0/Agent-R1/blob/main/agent_r1/tool/tool_base.py
         Initialize the tool
@@ -58,7 +58,7 @@ class ToolBase(metaclass=ToolMeta):
         }
 
     @classmethod
-    def create(cls, name, description, parameters, **kwargs):
+    def create(cls, name, description='', parameters=[], **kwargs):
         """
         Usage example:
 
@@ -70,43 +70,10 @@ class ToolBase(metaclass=ToolMeta):
         another_hammer = tool_class()
         ```
         """
-        tool_cls = cls.registry.get(name)
+        tool_cls = cls.registry.get(name, None)
         if not tool_cls:
             raise ValueError(f"No tool registered with name '{name}'")
         return tool_cls(name, description, parameters, **kwargs)
-
-    @classmethod
-    def from_system_prompt(cls, config, system_prompt, **kwargs):
-        """
-        Initialize a list of tools from Qwen2.5 style system prompt
-        Refer to: https://qwen.readthedocs.io/en/latest/framework/function_call.html#qwen2-5-function-calling-templates
-        """
-        pattern = re.escape(config.tool_desc_start) + r'(.*?)' + re.escape(config.tool_desc_end)
-        matches = re.findall(pattern, system_prompt, re.DOTALL)
-        if not matches:
-            return []
-
-        tool_desc_lines = matches[-1].split('\n')
-        result_tools = []
-        for tool_desc in tool_desc_lines:
-            if tool_desc.strip() == '':
-                continue
-
-            try:
-                tool_info = json.loads(tool_desc)
-                name = tool_info['function']['name']
-                desc_text = tool_info['function']['description']
-                params = tool_info['function']['parameters']
-                tool_cls = cls.registry.get(name)
-                if not tool_cls:
-                    continue
-                new_tool = tool_cls(name, desc_text, params, **kwargs)
-            except Exception as err:
-                print(f' [ERROR] {err=}')
-                continue
-            
-            result_tools.append(new_tool)
-        return result_tools
 
     def get_description(self) -> Dict:
         """
