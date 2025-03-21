@@ -25,14 +25,14 @@ FrozenLake Quick Guide
 Goal: Reach the goal (G).
 
 Symbols:
-F Frozen | H Hole | G Goal | S Player
+F Frozen | H Hole | G Goal | S Start | P Player
 
 Rules:
 1. Avoid falling into holes (H).
 2. Frozen tiles are slippery, you may move perpendicular to your intended direction.
 
 Action Space:
-Choose one action from the follow four actions.
+Choose one action from the following four actions.
 <action> left </action> | <action> down </action> | <action> right </action> | <action> up </action>
 
 Rewards:
@@ -44,7 +44,7 @@ The episode ends if the following happens:
 1. You moves into a hole.
 2. You reaches the goal. 
 
-[Cumulative Observations]:
+[Observations]:
 {observation}
 Decide the next action:\
 """

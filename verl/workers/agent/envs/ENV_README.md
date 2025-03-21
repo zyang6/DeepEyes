@@ -5,8 +5,7 @@
     ```bash
     export SIZE=8
     export P=0.8
-
-    python ./verl/workers/agent/create_dataset.py \
+    python verl/workers/agent/envs/frozenlake/create_dataset.py \
         --env frozenlake \
         --seed 1000 \
         --output data/frozenlake \
@@ -19,8 +18,7 @@
     ```bash
     export SIZE=8
     export P=0.8
-
-    python ./verl/workers/agent/create_dataset.py \
+    python verl/workers/agent/envs/frozenlake/create_dataset.py \
         --env frozenlake \
         --seed 1000 \
         --output data/frozenlake \

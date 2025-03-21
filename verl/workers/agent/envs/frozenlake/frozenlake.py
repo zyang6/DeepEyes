@@ -6,6 +6,7 @@ import copy
 from verl.workers.agent.tool_envs import ToolBase
 from typing import Optional, List
 from PIL import Image
+import re 
 
 class FrozenLakeTool(ToolBase):
     name = "frozenlake"
@@ -64,11 +65,35 @@ class FrozenLakeTool(ToolBase):
         if action in self.action_map:
             action = self.action_map[action]
         else:
+            print("action is not valid")
             return self.env.render(), 0, True, {}
         
         player_pos, self.reward, done, _, _ = self.env.step(action)
-        
-        return self.env.render(), self.reward, done, {}
+        print(f"position{player_pos}")
+        if self.render_mode == "rgb_array":
+            obs = self.render()
+        else:
+            origin_obs = self.render()
+            if isinstance(origin_obs, str):
+                obs = self.obs_transform(origin_obs, player_pos)
+                obs = "Your Observation\n" + obs
+
+        return obs, self.reward, done, {}
+
+    def obs_transform(self, origin_obs, player_pos):
+        row, col = player_pos // self.env.ncol, player_pos % self.env.ncol
+
+
+        def remove_ansi(text):
+            #  match the ANSI and remove
+            ansi_pattern = re.compile(r'\033\[[0-9;]*m')
+            return ansi_pattern.sub('', text)
+        text_obs = remove_ansi(origin_obs)
+        lines = text_obs.strip().split("\n")
+        grid = [list(line) for line in lines]
+        grid[row + 1][col] = "P"
+        obs = "\n".join(" ".join(row) for row in grid)
+        return obs
 
     def render(self):
         return self.env.render()
@@ -150,14 +175,20 @@ def gen_pil_image(rgb_array):
 
 if __name__ == "__main__":
     use_mm = False
-    tool = FrozenLakeTool(use_mm=use_mm)
-    observation, reward, done, info = tool.execute(action=1)
-    print(tool.env.s)
-    print(str(observation))
-    print(f"Observation:\n{observation}")
-    print(f"Reward: {reward}")
+    tool = FrozenLakeTool(use_mm=use_mm, size=4, is_slippery=False)
+    observation, reward, done, info = tool.execute(action="left")
+    print(observation, reward, done)
+    if not done:
+        observation, reward, done, info = tool.execute(action="up")
+        print(observation, reward, done)
+    if not done:
+        observation, reward, done, info = tool.execute(action="up")
+        print(observation, reward, done)
+    if not done:
+        observation, reward, done, info = tool.execute(action="up")
+        print(observation, reward, done)
+    if not done:
+        observation, reward, done, info = tool.execute(action="up")
+        print(observation, reward, done)
     if use_mm:
         gen_pil_image(rgb_array=observation)
-    observation, reward, done, info = tool.execute(action=2)
-    print(f"Observation:\n{observation}")
-    print(f"Reward: {reward}")
