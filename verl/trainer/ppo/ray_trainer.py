@@ -705,7 +705,7 @@ class RayPPOTrainer(object):
             sample_outputs.extend(output_texts)
 
             test_batch = test_batch.union(test_output_gen_batch)
-            # print(f"DEBUG:{test_batch}")
+
             # evaluate using reward_function
             reward_tensor = self.val_reward_fn(test_batch)
 

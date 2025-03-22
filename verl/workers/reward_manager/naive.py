@@ -16,6 +16,7 @@ from verl import DataProto
 from verl.utils.reward_score import _default_compute_score
 import torch
 
+import json
 
 class NaiveRewardManager:
     """The reward manager.
@@ -25,6 +26,8 @@ class NaiveRewardManager:
         self.tokenizer = tokenizer
         self.num_examine = num_examine  # the number of batches of decoded responses to print to the console
         self.compute_score = compute_score or _default_compute_score
+
+        self.step_cnt = 0
 
     def verify(self, data):
         scores = []
@@ -50,15 +53,12 @@ class NaiveRewardManager:
 
             data_source = data_item.non_tensor_batch['data_source']
 
-            env_reward = data_item.batch['env_reward']
-
             extra_info = data_item.non_tensor_batch.get('extra_info', None)
 
             score = self.compute_score(
                 data_source=data_source,
                 solution_str=response_str,
                 ground_truth=ground_truth,
-                env_reward=env_reward,
                 extra_info=extra_info,
             )
             scores.append(score)
@@ -98,18 +98,34 @@ class NaiveRewardManager:
 
             data_source = data_item.non_tensor_batch['data_source']
 
-            env_reward = data_item.batch['env_reward']
-
             extra_info = data_item.non_tensor_batch.get('extra_info', None)
 
             score = self.compute_score(
                 data_source=data_source,
                 solution_str=response_str,
                 ground_truth=ground_truth,
-                env_reward=env_reward,
                 extra_info=extra_info,
             )
             reward_tensor[i, valid_response_length - 1] = score
+
+            # FOR DEBUGGING ONLY!!! DO NOT COMMIT!!!
+            action_mask = data_item.batch['action_mask'][prompt_length: prompt_length + valid_response_length]
+            debug_output = dict(
+                step=self.step_cnt,
+                prompt=prompt_str,
+                response=response_str,
+                ground_truth=str(ground_truth['target'].tolist()[0]),
+                score=float(score),
+                valid_prompt_length=int(valid_prompt_length.cpu().item()),
+                valid_response_length=int(valid_response_length.cpu().item()),
+                prompt_ids=valid_prompt_ids.cpu().numpy().tolist(),
+                response_ids=valid_response_ids.cpu().numpy().tolist(),
+                action_mask=action_mask.cpu().numpy().tolist(),
+            )
+
+            debug_output_str = json.dumps(debug_output, ensure_ascii=False)
+            with open('/cpfs/user/fengyuan/code/github/verl/checkpoints/agent_ppo_debug/debug_rewards.jsonl', 'a+') as fout:
+                fout.write(debug_output_str + '\n')
 
             if data_source not in already_print_data_sources:
                 already_print_data_sources[data_source] = 0
@@ -120,5 +136,12 @@ class NaiveRewardManager:
                 print("[response]", response_str)
                 print("[ground_truth]", ground_truth)
                 print("[score]", score)
+
+        self.step_cnt += 1
+
+        if 'env_reward' in data_item.batch.keys():
+            print(f' [DEBUG reward] rewards_before={reward_tensor.cpu().mean().item()}')
+            reward_tensor += data.batch['env_reward']
+            print(f' [DEBUG reward] rewards_after={reward_tensor.cpu().mean().item()}')
 
         return reward_tensor

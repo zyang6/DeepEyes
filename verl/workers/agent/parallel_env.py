@@ -19,17 +19,6 @@ def _concat_vllm_input(prompt_token_ids, response_token_ids):
             response_token_ids.cpu().numpy(),
         ], axis=-1)
 
-# def compute_replace_length(processor, multi_model_data, prompt_token_ids):
-#     row_dict['multi_model_data'] = {"image": [process_image(image) for image in row_dict.pop(image_key)]}
-#     image_inputs = processor.image_processor(row_dict['multi_modal_data']['image'], return_tensors='pt')
-#     image_grid_thw = image_inputs["image_grid_thw"]
-#     if image_grid_thw is not None:
-#         merge_length = processor.image_processor.merge_size**2
-#         index = 0
-#         while 
-
-#     return replace_length
-
 def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sampling_params):
     agent_sampling_params = sampling_params.clone()
     agent_sampling_params.detokenize = True
@@ -142,8 +131,7 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
     action_mask_tensor = pad_2d_list_to_length(running_action_masks, 0, max_total_length).to(target_device)
     reward_tensor_list = [reward[: max_total_length] for reward in reward_tensor_list]
     reward_tensor = pad_2d_list_to_length(reward_tensor_list, 0.0, max_total_length).to(target_device)
-    reward_tensor = reward_tensor[:, -config.response_length: ]
-    return state_tensor[:, -config.response_length:], action_mask_tensor, reward_tensor
+    return state_tensor[:, -config.response_length:], action_mask_tensor, reward_tensor[:, -config.response_length: ]
 
 
 def execute_tool_call(sample, tokenizer=None, pbar=None):
@@ -231,7 +219,7 @@ class ParallelEnv:
         
         # 1. filtering valid actions
         for idx, act in enumerate(actions):
-            print(f' [DEBUG vllm output] {idx=}, {act.outputs[0].finish_reason=}, {act.outputs[0].stop_reason=}')
+            # print(f' [DEBUG vllm output] {idx=}, {act.outputs[0].finish_reason=}, {act.outputs[0].stop_reason=}')
             if act.outputs[0].finish_reason == 'length':
                 done_list.append(True)
                 continue
