@@ -19,6 +19,17 @@ def _concat_vllm_input(prompt_token_ids, response_token_ids):
             response_token_ids.cpu().numpy(),
         ], axis=-1)
 
+# def compute_replace_length(processor, multi_model_data, prompt_token_ids):
+#     row_dict['multi_model_data'] = {"image": [process_image(image) for image in row_dict.pop(image_key)]}
+#     image_inputs = processor.image_processor(row_dict['multi_modal_data']['image'], return_tensors='pt')
+#     image_grid_thw = image_inputs["image_grid_thw"]
+#     if image_grid_thw is not None:
+#         merge_length = processor.image_processor.merge_size**2
+#         index = 0
+#         while 
+
+#     return replace_length
+
 def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sampling_params):
     agent_sampling_params = sampling_params.clone()
     agent_sampling_params.detokenize = True
