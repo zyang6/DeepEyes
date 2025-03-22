@@ -89,6 +89,10 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
             running_action_masks[idx] = torch.cat([running_action_masks[idx], action_mask])
             # print(f' [DEBUG resp] resp_size={response_token_ids.shape[-1]}, total_size={running_states[idx].shape[-1]}')
 
+            # NOTE: Ensure the last tokens are not obs
+            if step == config.agent.max_turns - 1:
+                continue
+
             # process obs tokens and images
             if 'prompt_token_ids' in obs:
                 obs_token_ids = obs['prompt_token_ids'].to(running_states[idx].device)
@@ -216,6 +220,7 @@ class ParallelEnv:
         
         # 1. filtering valid actions
         for idx, act in enumerate(actions):
+            print(f' [DEBUG vllm output] {idx=}, {act.outputs[0].finish_reason=}, {act.outputs[0].stop_reason=}')
             if act.outputs[0].finish_reason == 'length':
                 done_list.append(True)
                 continue

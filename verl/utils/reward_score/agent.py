@@ -5,6 +5,7 @@ exact_match = evaluate.load("exact_match")
 
 def compute_score(data_source: str, predict_str: str, ground_truth: str) -> float:
     if data_source.lower() == 'rag':
+        predict_str = '<think>' + predict_str
         think_pattern = re.compile(r'<think>(.*?)</think>', re.DOTALL)
         think_match = re.search(think_pattern, predict_str)
         if not think_match:
