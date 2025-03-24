@@ -102,7 +102,7 @@ actor_rollout_ref:
       do_sample: False # default eager for validation
     agent:
       activate_agent: False
-      vllm_buffer_length: 4096
+      single_response_max_tokens: 4096
       single_obs_max_length: 4096
       max_turns: 10000
       concurrent_workers: 16

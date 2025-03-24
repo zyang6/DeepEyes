@@ -26,6 +26,8 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
     agent_sampling_params.spaces_between_special_tokens = False
     agent_sampling_params.n = 1
     agent_sampling_params.include_stop_str_in_output = True
+    max_generated_tokens = min(config.agent.single_response_max_tokens, config.response_length)
+    agent_sampling_params.max_tokens = max_generated_tokens
 
     # support custom stop specified in dataset, like </search>, ```, etc.
     custom_stop = config.agent.custom_stop
@@ -136,7 +138,7 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
     action_mask_tensor = pad_2d_list_to_length(running_action_masks, 0, max_total_length).to(target_device)
     reward_tensor_list = [reward[: max_total_length] for reward in reward_tensor_list]
     reward_tensor = pad_2d_list_to_length(reward_tensor_list, 0.0, max_total_length).to(target_device)
-    return state_tensor[:, -config.response_length:], action_mask_tensor, reward_tensor[:, -config.response_length: ]
+    return state_tensor[:, -config.response_length: ], action_mask_tensor, reward_tensor[:, -config.response_length: ]
 
 
 def execute_tool_call(sample, tokenizer=None, pbar=None):
