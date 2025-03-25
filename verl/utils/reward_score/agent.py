@@ -99,30 +99,52 @@ def f1_score(prediction, ground_truth):
 def compute_score(data_source: str, predict_str: str, ground_truth: str) -> float:
     is_format_error = False
     predict_str = '<think>' + predict_str
-    think_pattern = re.compile(r'<think>(.*?)</think>', re.DOTALL)
-    think_match = re.search(think_pattern, predict_str)
-    if not think_match:
+    count_1 = predict_str.count("<|begin_of_documents|>\n")
+    count_2 = predict_str.count("<|end_of_documents|>\n")
+    count_3 = predict_str.count("<|begin_of_query|>")
+    count_4 = predict_str.count("<|end_of_query|>")
+    count_5 = predict_str.count("<|begin_of_documents|>")
+    count_6 = predict_str.count("<|end_of_documents|>")
+    count_7 = predict_str.count("<|begin_of_documents|>\n(1)")
+    if not (count_1 == count_2 == count_3 == count_4 == count_5 == count_6 == count_7):
         is_format_error = True
 
-    retrieval_pattern = re.compile(r'<\|begin_of_query\|>(.*?)<\|end_of_query\|>', re.DOTALL)
-    retrieval_match = re.search(retrieval_pattern, predict_str)
-    doc_pattern = re.compile(r'<\|begin_of_documents\|>(.*?)<\|end_of_documents\|>', re.DOTALL)
-    doc_match = re.search(doc_pattern, predict_str)
-    retrieval_reward = 0.2 if retrieval_match and doc_match else 0.0
-
-    predict_no_think = predict_str.split('</think>')[-1]
-    answer_pattern = re.compile(r'<answer>(.*?)</answer>', re.DOTALL)
-    answer_match = re.search(answer_pattern, predict_no_think)
-    if not answer_match:
+    count_assiatant_1 = predict_str.count("Assistant")
+    count_assiatant_2 = predict_str.count("assistant")
+    if count_assiatant_1 != 0 or count_assiatant_2 != 0:
         is_format_error = True
-        acc_reward = 0.0
+
+    count_think_1 = predict_str.count("<think>")
+    count_think_2 = predict_str.count("</think>")
+    if count_think_1 != count_think_2:
+        is_format_error = True
+
+    count_answer_1 = predict_str.count("<answer>")
+    count_answer_2 = predict_str.count("</answer>")
+    if count_answer_1 != 1 or count_answer_2 != 1:
+        is_format_error = True
+
+    answer_text = predict_str.split("<answer>")[-1].split("</answer>")[0].strip()
+    if "begin_of_query" in answer_text or "begin_of_documents" in answer_text:
+        is_format_error = True
+
+    answer_len=len(answer_text.split())
+    if answer_len > 10:
+        is_format_error = True
+
+    # retrieval_pattern = re.compile(r'<\|begin_of_query\|>(.*?)<\|end_of_query\|>', re.DOTALL)
+    # retrieval_match = re.search(retrieval_pattern, predict_str)
+    # doc_pattern = re.compile(r'<\|begin_of_documents\|>(.*?)<\|end_of_documents\|>', re.DOTALL)
+    # doc_match = re.search(doc_pattern, predict_str)
+    # retrieval_reward = 0.5 if retrieval_match and doc_match else 0.0
+
+    if not is_format_error:
+        retrieval_reward = 0.5 if count_3 == 1 and count_7 == 1 else 0.0
     else:
-        pred_answer = answer_match.group(1).strip()
-        em_score = exact_match.compute(references=[ground_truth], predictions=[pred_answer], ignore_case=True, ignore_punctuation=True)
-        if em_score['exact_match'] > 0.8:
-            acc_reward = float(em_score['exact_match'])
-        else:
-            acc_reward, _ , _ = f1_score(pred_answer, ground_truth)
+        retrieval_reward = 0.0
+
+    em_score = exact_match.compute(references=[ground_truth], predictions=[answer_text], ignore_case=True, ignore_punctuation=True)
+    acc_reward, _ , _ = f1_score(answer_text, ground_truth)
     
-    format_reward = -2.0 if is_format_error else 0.0
-    return format_reward + retrieval_reward + acc_reward
+    format_reward = -1.0 if is_format_error else 0.0
+    return format_reward + retrieval_reward + 2.0 * acc_reward
