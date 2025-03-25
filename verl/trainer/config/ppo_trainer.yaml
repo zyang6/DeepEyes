@@ -108,7 +108,7 @@ actor_rollout_ref:
       concurrent_workers: 16
       tool_name_key: data_source
       tool_meta_key: null
-      custom_stop: [ '</search>', '</answer>', '</action>' ]
+      custom_stop: [ '<|end_of_query|>', '</answer>' ]
       show_tqdm: True
 
 critic:
