@@ -25,6 +25,7 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
     agent_sampling_params.skip_special_tokens = False
     agent_sampling_params.spaces_between_special_tokens = False
     agent_sampling_params.n = 1
+    agent_sampling_params.top_p = 0.95
     agent_sampling_params.include_stop_str_in_output = True
     max_generated_tokens = min(config.agent.single_response_max_tokens, config.response_length)
     agent_sampling_params.max_tokens = max_generated_tokens

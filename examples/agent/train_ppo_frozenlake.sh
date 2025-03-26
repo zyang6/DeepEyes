@@ -4,9 +4,11 @@ set -x
 export DATA_DIR=/cpfs/user/yangminghao/RL/fengyuan/InteractiveRL/data/frozenlake
 export OUTPUT_DIR=/cpfs/user/yangminghao/RL/fengyuan/InteractiveRL/ckpt
 
-PROJECT_NAME="agent_ppo_debug_frozenlake"
-EXPERIMENT_NAME=qwen25_7b_instruct_debug
-BASE_MODEL=/cpfs/user/fengyuan/backbone/qwen25/Qwen2.5-7B-Instruct
+PROJECT_NAME="agent_ppo_frozenlake"
+EXPERIMENT_NAME=qwen25_0.5b_instruct
+# BASE_MODEL=/cpfs/user/fengyuan/backbone/qwen25/Qwen2.5-7B-Instruct
+BASE_MODEL=/cpfs/user/yangminghao/hf_model/Qwen2.5-0.5B-Instruct
+
 
 mkdir -p ${OUTPUT_DIR}
 mkdir -p ${OUTPUT_DIR}/${PROJECT_NAME}/${EXPERIMENT_NAME}
@@ -18,16 +20,16 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     data.val_files=$DATA_DIR/test.parquet \
     data.train_batch_size=512 \
     data.max_prompt_length=512 \
-    data.max_response_length=512 \
+    data.max_response_length=16384 \
     data.return_raw_chat=True \
     algorithm.adv_estimator=gae \
-    algorithm.lam=0.999 \
+    algorithm.lam=1 \
     actor_rollout_ref.model.path=${BASE_MODEL} \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.actor.optim.lr_warmup_steps_ratio=0.03 \
-    actor_rollout_ref.actor.ppo_mini_batch_size=8 \
+    actor_rollout_ref.actor.ppo_mini_batch_size=128 \
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=2 \
     actor_rollout_ref.actor.fsdp_config.param_offload=False \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=False \
@@ -42,7 +44,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.free_cache_engine=True \
     actor_rollout_ref.rollout.agent.activate_agent=True \
     actor_rollout_ref.rollout.agent.single_obs_max_length=512 \
-    actor_rollout_ref.rollout.agent.max_turns=100 \
+    actor_rollout_ref.rollout.agent.max_turns=16 \
     actor_rollout_ref.rollout.agent.concurrent_workers=4 \
     critic.optim.lr=1e-5 \
     critic.model.use_remove_padding=True \
@@ -54,9 +56,9 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     critic.model.fsdp_config.optimizer_offload=True \
     algorithm.kl_ctrl.kl_coef=0.001 \
     trainer.critic_warmup=0 \
-    trainer.logger=['console'] \
-    trainer.n_gpus_per_node=8 \
-    trainer.nnodes=${WORLD_SIZE} \
+    trainer.logger=['console','wandb'] \
+    trainer.n_gpus_per_node=1 \
+    trainer.nnodes=1 \
     trainer.save_freq=16 \
     trainer.test_freq=16 \
     trainer.project_name=${PROJECT_NAME} \
