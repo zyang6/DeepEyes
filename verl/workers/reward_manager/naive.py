@@ -17,6 +17,7 @@ from verl.utils.reward_score import _default_compute_score
 import torch
 
 import json
+import datetime
 
 class NaiveRewardManager:
     """The reward manager.
@@ -46,8 +47,8 @@ class NaiveRewardManager:
             valid_response_ids = response_ids[:valid_response_length]
 
             # decode
-            prompt_str = self.tokenizer.decode(valid_prompt_ids, skip_special_tokens=True)
-            response_str = self.tokenizer.decode(valid_response_ids, skip_special_tokens=True)
+            prompt_str = self.tokenizer.decode(valid_prompt_ids)
+            response_str = self.tokenizer.decode(valid_response_ids)
 
             ground_truth = data_item.non_tensor_batch['reward_model']['ground_truth']
 
@@ -91,8 +92,8 @@ class NaiveRewardManager:
             valid_response_ids = response_ids[:valid_response_length]
 
             # decode
-            prompt_str = self.tokenizer.decode(valid_prompt_ids, skip_special_tokens=True)
-            response_str = self.tokenizer.decode(valid_response_ids, skip_special_tokens=True)
+            prompt_str = self.tokenizer.decode(valid_prompt_ids)
+            response_str = self.tokenizer.decode(valid_response_ids)
 
             ground_truth = data_item.non_tensor_batch['reward_model']['ground_truth']
 
@@ -112,9 +113,10 @@ class NaiveRewardManager:
             # action_mask = data_item.batch['action_mask'][prompt_length: prompt_length + valid_response_length]
             # debug_output = dict(
             #     step=self.step_cnt,
+            #     timetag=str(datetime.datetime.now()),
             #     prompt=prompt_str,
             #     response=response_str,
-            #     ground_truth=str(ground_truth['target'].tolist()[0]),
+            #     ground_truth=str(ground_truth),
             #     score=float(score),
             #     valid_prompt_length=int(valid_prompt_length.cpu().item()),
             #     valid_response_length=int(valid_response_length.cpu().item()),
@@ -124,7 +126,7 @@ class NaiveRewardManager:
             # )
 
             # debug_output_str = json.dumps(debug_output, ensure_ascii=False)
-            # with open('/cpfs/user/fengyuan/code/github/verl/checkpoints/agent_ppo_debug/debug_rewards.jsonl', 'a+') as fout:
+            # with open('/cpfs/user/fengyuan/code/github/verl/checkpoints/agent_ppo_debug/debug_rewards_v2.jsonl', 'a+') as fout:
             #     fout.write(debug_output_str + '\n')
 
             # if data_source not in already_print_data_sources:
