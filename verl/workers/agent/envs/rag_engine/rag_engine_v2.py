@@ -9,14 +9,14 @@ class RAGEngineEnvV2(ToolBase):
     name = "rag_v2"
 
     valid_url_list = [
-        "http://10.39.5.6:5004/queries",
-        "http://10.39.5.6:15004/queries",
-        "http://10.39.5.6:15008/queries",
-        "http://10.39.5.6:25002/queries",
-        "http://10.39.5.6:25004/queries",
-        "http://10.39.5.6:25009/queries",
-        "http://10.39.5.6:21546/queries",
-        "http://10.39.5.6:21309/queries",
+        "http://10.39.5.6:25111/queries",
+        "http://10.39.5.6:25112/queries",
+        "http://10.39.5.6:25113/queries",
+        "http://10.39.5.6:25114/queries",
+        "http://10.39.5.6:25115/queries",
+        "http://10.39.5.6:25116/queries",
+        "http://10.39.5.6:25117/queries",
+        "http://10.39.5.6:25118/queries",
     ]
 
     topk = 3

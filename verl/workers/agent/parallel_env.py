@@ -28,6 +28,8 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
     agent_sampling_params.include_stop_str_in_output = True
     max_generated_tokens = min(config.agent.single_response_max_tokens, config.response_length)
     agent_sampling_params.max_tokens = max_generated_tokens
+    # NOTE: to prevent oov issue for qwen base
+    agent_sampling_params.top_p = 0.99
 
     # support custom stop specified in dataset, like </search>, ```, etc.
     custom_stop = config.agent.custom_stop

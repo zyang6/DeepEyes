@@ -138,13 +138,10 @@ def compute_score(data_source: str, predict_str: str, ground_truth: str) -> floa
     # doc_match = re.search(doc_pattern, predict_str)
     # retrieval_reward = 0.5 if retrieval_match and doc_match else 0.0
 
-    if not is_format_error:
-        retrieval_reward = 0.5 if count_3 == 1 and count_7 == 1 else 0.0
-    else:
-        retrieval_reward = 0.0
-
-    em_score = exact_match.compute(references=[ground_truth], predictions=[answer_text], ignore_case=True, ignore_punctuation=True)
+    retrieval_reward = 0.1 if count_7 >= 1 and count_2 == count_7 else 0.0
+    # em_score = exact_match.compute(references=[ground_truth], predictions=[answer_text], ignore_case=True, ignore_punctuation=True)
     acc_reward, _ , _ = f1_score(answer_text, ground_truth)
-    
-    format_reward = -1.0 if is_format_error else 0.0
-    return format_reward + retrieval_reward + 2.0 * acc_reward
+    acc_reward = 2.0 * acc_reward
+
+    format_reward = -2.0 if is_format_error else 0.0
+    return format_reward + retrieval_reward + acc_reward

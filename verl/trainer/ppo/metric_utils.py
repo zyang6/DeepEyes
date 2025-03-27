@@ -42,6 +42,7 @@ def _compute_response_info(batch):
         obs_length = obs_mask.sum(-1).float()
     else:
         obs_length = torch.zeros_like(response_length)
+    response_length -= obs_length
 
     return dict(
         response_mask=response_mask,
