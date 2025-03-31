@@ -4,7 +4,7 @@ set -x
 DATA_DIR=/cpfs/user/fengyuan/verl_data/r1-searcher
 
 PROJECT_NAME="agent_ppo_debug"
-eXPERIMENT_NAME="GRPO-v1-new-template"
+EXPERIMENT_NAME="GRPO-v1-new-template"
 
 # export VLLM_ATTENTION_BACKEND=XFORMERS # vllm + qwen2-7b with flash_attn has some issues
 
