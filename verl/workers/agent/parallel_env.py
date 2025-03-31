@@ -73,11 +73,7 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
             use_tqdm=False
         )
         observations, rewards, dones, info = env.step(actions)
-        # obs_token_ids = [obs['prompt_token_ids'] for obs in observations]
-        # # TODO: support mm input in obs!!!
-        # multi_modal_data = [obs['multi_modal_data'] for obs in observations]
 
-        # for idx, obs, mm, act, rew, done in zip(active_indices, obs_token_ids, multi_modal_data, actions, rewards, dones):
         for idx, obs, act, rew, done in zip(active_indices, observations, actions, rewards, dones):
             # process response token ids
             response_token_ids = torch.tensor(act.outputs[0].token_ids, dtype=torch.int64, device=running_states[idx].device)
@@ -126,13 +122,6 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
                 active_mask[idx] = False
 
     env.close()
-    # running_response_string = tokenizer.batch_decode(
-    #     running_states,
-    #     skip_special_tokens=False,
-    # )
-    # print(f" [DEBUG response] {running_response_string[:3]}=")
-    # # print(f' [DEBUG state] {running_states[0]=}')
-    # print(f" [DEBUG mask] {running_action_masks[:3]}=")
     max_total_length = config.prompt_length + config.response_length
     target_device = prompts.batch['input_ids'].device
     running_states = [state[: max_total_length] for state in running_states]

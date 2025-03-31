@@ -4,20 +4,25 @@ set -x
 DATA_DIR=/cpfs/user/fengyuan/verl_data/r1-searcher
 
 PROJECT_NAME="agent_ppo_debug"
-EXPERIMENT_NAME="PPO_new_template_v1"
+EXPERIMENT_NAME="R1-Searcher-32k-v10-lambda"
 
 # export VLLM_ATTENTION_BACKEND=XFORMERS # vllm + qwen2-7b with flash_attn has some issues
 
 REF_MODEL_PATH=/cpfs/user/fengyuan/backbone/qwen25/Qwen2.5-7B
+REF_MODEL_PATH=/cpfs/user/fengyuan/code/github/verl/checkpoints/agent_ppo_debug/R1-Searcher-32k-v7-retrieval_reward/global_step_160/actor/huggingface
+REF_MODEL_PATH=/cpfs/user/fengyuan/code/github/verl/checkpoints/agent_ppo_debug/GRPO-v0-test/global_step_128/actor/huggingface
+REF_MODEL_PATH=/cpfs/user/fengyuan/backbone/rag/R1-Searcher
+REF_MODEL_PATH=/cpfs/user/fengyuan/backbone/rag/Search-R1
+
 PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     data.train_files=${DATA_DIR}/train.parquet \
     data.val_files=${DATA_DIR}/test.parquet \
-    data.train_batch_size=256 \
+    data.train_batch_size=1024 \
     data.max_prompt_length=1024 \
     data.max_response_length=10240 \
     algorithm.adv_estimator=gae \
     algorithm.kl_ctrl.kl_coef=0.0 \
-    algorithm.lam=1.0 \
+    algorithm.lam=0.95 \
     actor_rollout_ref.model.path=${REF_MODEL_PATH} \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.actor.ppo_mini_batch_size=256 \
@@ -26,7 +31,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=1 \
     actor_rollout_ref.rollout.tensor_model_parallel_size=4 \
     actor_rollout_ref.rollout.name=vllm \
-    actor_rollout_ref.rollout.n=4 \
+    actor_rollout_ref.rollout.n=1 \
     actor_rollout_ref.rollout.temperature=1 \
     actor_rollout_ref.rollout.max_num_batched_tokens=32768 \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.6 \
@@ -48,8 +53,9 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     critic.model.fsdp_config.param_offload=True \
     critic.model.fsdp_config.optimizer_offload=True \
     critic.ppo_micro_batch_size_per_gpu=1 \
-    trainer.logger=['console','wandb'] \
-    +trainer.val_before_train=False \
+    trainer.logger=['console'] \
+    +trainer.val_before_train=True \
+    +trainer.val_only=True \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=${WORLD_SIZE} \
     trainer.save_freq=32 \
