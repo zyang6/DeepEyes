@@ -106,6 +106,8 @@ class vLLMRollout(BaseRollout):
             raise ValueError('Enable chunked prefill, max_num_batched_tokens is smaller than max_model_len, \
                              please increase max_num_batched_tokens or disable chunked prefill')
 
+        trust_remote_code = kwargs.get('trust_remote_code', False)
+
         self.inference_engine = LLM(
             model=model_path,
             enable_sleep_mode=True,
@@ -115,12 +117,14 @@ class vLLMRollout(BaseRollout):
             enforce_eager=config.enforce_eager,
             gpu_memory_utilization=config.gpu_memory_utilization,
             disable_custom_all_reduce=True,
+            disable_mm_preprocessor_cache=True,
             skip_tokenizer_init=False,
             max_model_len=max_model_len,
             disable_log_stats=config.disable_log_stats,
             max_num_batched_tokens=max_num_batched_tokens,
             enable_chunked_prefill=config.enable_chunked_prefill,
             enable_prefix_caching=True,
+            trust_remote_code=trust_remote_code,
         )
 
         # Offload vllm model to reduce peak memory usage
