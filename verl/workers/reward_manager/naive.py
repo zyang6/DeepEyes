@@ -75,6 +75,11 @@ class NaiveRewardManager:
 
         reward_tensor = torch.zeros_like(data.batch['responses'], dtype=torch.float32)
 
+        action_or_attn_mask = data.batch['action_mask'] # if 'action_mask' in data.batch.keys() else data.batch['attention_mask']
+        if 'env_reward' in data.batch.keys():
+            reward_tensor += data.batch['env_reward']
+            print(f' [DEBUG reward] mean={reward_tensor.mean().item()}, min={reward_tensor.min().item()}, max={reward_tensor.max().item()}')
+
         already_print_data_sources = {}
 
         for i in range(len(data)):
@@ -107,10 +112,14 @@ class NaiveRewardManager:
                 ground_truth=ground_truth,
                 extra_info=extra_info,
             )
-            reward_tensor[i, valid_response_length - 1] = score
 
-            # FOR DEBUGGING ONLY!!! DO NOT COMMIT!!!
-            # action_mask = data_item.batch['action_mask'][prompt_length: prompt_length + valid_response_length]
+            # reward_tensor[i, valid_response_length - 1] = score
+            eos_idx = torch.nonzero(action_or_attn_mask[i, prompt_length: prompt_length + valid_response_length])[-1]
+            reward_tensor[i, eos_idx] = score
+
+            # # FOR DEBUGGING ONLY!!! DO NOT COMMIT!!!
+            # action_mask = action_or_attn_mask[i, prompt_length: prompt_length + valid_response_length]
+            # env_reward = data_item.batch['env_reward'][:valid_response_length]
             # debug_output = dict(
             #     step=self.step_cnt,
             #     timetag=str(datetime.datetime.now()),
@@ -118,15 +127,17 @@ class NaiveRewardManager:
             #     response=response_str,
             #     ground_truth=str(ground_truth),
             #     score=float(score),
+            #     env_reward_sum=float(env_reward.cpu().numpy().sum()),
             #     valid_prompt_length=int(valid_prompt_length.cpu().item()),
             #     valid_response_length=int(valid_response_length.cpu().item()),
             #     prompt_ids=valid_prompt_ids.cpu().numpy().tolist(),
             #     response_ids=valid_response_ids.cpu().numpy().tolist(),
             #     action_mask=action_mask.cpu().numpy().tolist(),
+            #     reward_list=reward_tensor[i, :valid_response_length].cpu().numpy().tolist(),
             # )
 
             # debug_output_str = json.dumps(debug_output, ensure_ascii=False)
-            # with open('/cpfs/user/fengyuan/code/github/verl/checkpoints/agent_ppo_debug/debug_rewards_v2.jsonl', 'a+') as fout:
+            # with open('/cpfs/user/fengyuan/code/github/verl/checkpoints/agent_ppo_debug/ppo_rewards_32b.jsonl', 'a+') as fout:
             #     fout.write(debug_output_str + '\n')
 
             # if data_source not in already_print_data_sources:
@@ -140,10 +151,5 @@ class NaiveRewardManager:
             #     print("[score]", score)
 
         self.step_cnt += 1
-
-        if 'env_reward' in data_item.batch.keys():
-            print(f' [DEBUG reward] rewards_before={reward_tensor.cpu().mean().item()}')
-            reward_tensor += data.batch['env_reward']
-            print(f' [DEBUG reward] rewards_after={reward_tensor.cpu().mean().item()}')
 
         return reward_tensor

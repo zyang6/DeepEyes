@@ -7,7 +7,15 @@ from concurrent.futures import ThreadPoolExecutor
 from verl.utils.torch_functional import get_eos_mask, pad_2d_list_to_length
 from verl.workers.agent.tool_envs import ToolBase
 
-def _concat_vllm_input(prompt_token_ids, response_token_ids):
+def _concat_vllm_input(prompt_token_ids, response_token_ids, tokenizer=None):
+    # NOTE: temporarily fix qwen-base oov issue
+    if tokenizer is not None:
+        max_token_id = max(tokenizer.get_vocab().values())
+        tokenizer_size = len(tokenizer)
+        max_token_id = max(max_token_id, tokenizer_size)
+        valid_token_mask = torch.le(response_token_ids, max_token_id)
+        response_token_ids = torch.masked_select(response_token_ids, valid_token_mask)
+
     if isinstance(prompt_token_ids, torch.Tensor):
         return torch.cat([
             prompt_token_ids,
@@ -29,16 +37,11 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
     max_generated_tokens = min(config.agent.single_response_max_tokens, config.response_length)
     agent_sampling_params.max_tokens = max_generated_tokens
 
-    # NOTE: to prevent oov issue for qwen base
-    agent_sampling_params.top_p = 0.99
-
     # support custom stop specified in dataset, like </search>, ```, etc.
-    custom_stop = config.agent.custom_stop
-    if custom_stop:
-        if isinstance(custom_stop, str):
-            custom_stop = [custom_stop]
+    if config.agent.custom_stop:
         prev_stop = sampling_params.stop if sampling_params.stop else []
-        agent_sampling_params.stop = prev_stop + custom_stop
+        agent_sampling_params.stop = prev_stop + config.agent.custom_stop
+
     env = ParallelEnv(config.agent, tokenizer)
     env.reset(prompts, n=sampling_params.n)
     batch_size = len(vllm_inputs)
@@ -60,6 +63,7 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
             reward_tensor_list.append(reward_tensor)
             active_mask.append(True)
 
+    max_total_length = config.prompt_length + config.response_length
     for step in range(config.agent.max_turns):
         print(f' [DEBUG 000] {step=}, total={batch_size}, n={sampling_params.n}, num_active={sum(active_mask)}')
         if sum(active_mask) == 0:
@@ -78,7 +82,11 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
             # process response token ids
             response_token_ids = torch.tensor(act.outputs[0].token_ids, dtype=torch.int64, device=running_states[idx].device)
             running_states[idx] = torch.cat([running_states[idx], response_token_ids])
-            vllm_input_list[idx]['prompt_token_ids'] = _concat_vllm_input(vllm_input_list[idx]['prompt_token_ids'], response_token_ids)
+            vllm_input_list[idx]['prompt_token_ids'] = _concat_vllm_input(
+                vllm_input_list[idx]['prompt_token_ids'], 
+                response_token_ids,
+                tokenizer=tokenizer,
+            )
 
             action_reward = torch.zeros_like(response_token_ids, dtype=torch.float, device=reward_tensor_list[idx].device)
             reward_tensor_list[idx] = torch.cat([reward_tensor_list[idx], action_reward])
@@ -88,20 +96,23 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
             running_action_masks[idx] = torch.cat([running_action_masks[idx], action_mask])
             # print(f' [DEBUG resp] resp_size={response_token_ids.shape[-1]}, total_size={running_states[idx].shape[-1]}')
 
-            # NOTE: Ensure the last tokens are not obs
-            if step == config.agent.max_turns - 1:
+            # Ensure the last token is not obs
+            if done or step == config.agent.max_turns - 1:
+                active_mask[idx] = False
                 continue
 
             # process obs tokens and images
             if 'prompt_token_ids' in obs:
                 obs_token_ids = obs['prompt_token_ids'].to(running_states[idx].device)
-                # if obs gets too long, truncated obs will be fed into the model
                 if len(obs_token_ids) > config.agent.single_obs_max_length:
                     print("[WARNING] OBSERVATION TOO LONG, CONSIDER CHANGING YOUR CONFIG")
-                    obs_token_ids = obs_token_ids[:config.agent.single_obs_max_length]
 
                 running_states[idx] = torch.cat([running_states[idx], obs_token_ids])
-                vllm_input_list[idx]['prompt_token_ids'] = _concat_vllm_input(vllm_input_list[idx]['prompt_token_ids'], obs_token_ids)
+                vllm_input_list[idx]['prompt_token_ids'] = _concat_vllm_input(
+                    vllm_input_list[idx]['prompt_token_ids'], 
+                    obs_token_ids,
+                    tokenizer=tokenizer,
+                )
 
                 obs_reward = torch.zeros(len(obs_token_ids), dtype=torch.float, device=reward_tensor_list[idx].device)
                 reward_tensor_list[idx] = torch.cat([reward_tensor_list[idx], obs_reward], dim=-1)
@@ -116,13 +127,12 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
                 if 'multi_modal_data' not in vllm_input_list[idx]:
                     vllm_input_list[idx]['multi_modal_data'] = {"image": []}
                 vllm_input_list[idx]['multi_modal_data']['image'] += mm['image']
-                print(f' [DEBUG img] mm_image_size={len(mm["image"])}')
+                print(f' [DEBUG img] update num_images={len(mm["image"])}')
 
-            if done or running_states[idx].shape[-1] >= config.prompt_length + config.response_length:
+            if running_states[idx].shape[-1] >= max_total_length or vllm_input_list[idx]['prompt_token_ids'].shape[-1] >= max_total_length:
                 active_mask[idx] = False
 
     env.close()
-    max_total_length = config.prompt_length + config.response_length
     target_device = prompts.batch['input_ids'].device
     running_states = [state[: max_total_length] for state in running_states]
     state_tensor = pad_2d_list_to_length(running_states, tokenizer.pad_token_id, max_total_length).to(target_device)
@@ -137,8 +147,7 @@ def execute_tool_call(sample, tokenizer=None, pbar=None):
     action_string = sample.get('action', '')
     tool = sample.get('tool', None)
     agent_meta = sample.get('agent_meta', {})
-    # print(f' [DEBUG rag input] {sample["idx"]=}, {action_string=}, {tool=}, agent_meta={agent_meta}')
-    # print(f' [DEBUG frozenlake input] {sample["idx"]=}, {action_string=}, {tool=}, agent_meta={agent_meta}')
+
     # non-agent data
     if action_string == '' or tool is None:
         return {}, 0.0, True, {}
@@ -147,33 +156,45 @@ def execute_tool_call(sample, tokenizer=None, pbar=None):
 
     # post-process
     if not tool_result:
-        # print(f' [WARNING] {action_string=} is not valid for tool={tool.name}')
         tool_result_info = {}
-    elif isinstance(tool_result, dict):
-        # 1. tool return: {"prompt_token_ids: ..., "multi_modal_data": ...}
-        # TODO: Re-generate prompt_token_ids according to multi_modal_data
-        tool_result_info = tool_result
 
-    elif isinstance(tool_result, str) and len(tool_result) > 0:
-        # 2. tool return str
+    elif isinstance(tool_result, str):
+        # Format 1: text output
         obs_token_ids = tokenizer.encode(tool_result)
         tool_result_info = {"prompt_token_ids": torch.tensor(obs_token_ids)}
-        # print(f' [DEBUG rag output] {tool_result=}, {len(obs_token_ids)=}')
 
-    elif isinstance(tool_result, list) and len(tool_result) > 0 and isinstance(tool_result[0], str):
-        # 3. List[str], treated as openai/qwen style output
-        msg_list = [{"role": "tool", "content": res} for res in tool_result]
-        obs_token_ids = tokenizer.apply_chat_template(msg_list, add_generation_prompt=True, return_tensors='pt')[0]
-        # VERY UGLY: remove the system prompt added by qwen tokenizer
+    elif isinstance(tool_result, list) and isinstance(tool_result[0], dict):
+        # Format 2: [{"role": "...", "content": "..."}, ...]
+        obs_token_ids = tokenizer.apply_chat_template(tool_result, add_generation_prompt=True, return_tensors='pt')[0]
+
+        # NOTE: skip the sp (and the \n token that comes after it) added by Qwen tokenizer
         eos_start_idx = torch.nonzero(obs_token_ids == self.tokenizer.eos_token_id)
         if eos_start_idx.shape[0] > 0:
             eos_start_idx = eos_start_idx[0].item()
-            obs_token_ids = obs_token_ids[eos_start_idx + 1 : ]
+            obs_token_ids = obs_token_ids[eos_start_idx + 2 : ]
         else:
             raise ValueError(f"tool [{tool.name}] returned type List[str] output must be in openai/qwen format : {tool_result}")
-        if not isinstance(obs_token_ids, torch.Tensor):
-            obs_token_ids = torch.tensor(obs_token_ids)
         tool_result_info = {"prompt_token_ids": obs_token_ids}
+
+    elif isinstance(tool_result, dict):
+        # Format 3: {"prompt": "...", "chat": [{"role": "...", "content": "..."}, ...], "multi_modal_data": ...}
+        assert "prompt" in tool_result or 'chat' in tool_result, f"Neither `prompt` or `chat` in {tool_result=}"
+        prompt_str = tool_result.pop("prompt", "")
+        chat_list = tool_result.pop("chat", [])
+
+        if len(prompt_str) > 0:
+            obs_token_ids = tokenizer.encode(prompt_str, return_tensors='pt')[0]
+        elif len(chat_list) > 0:
+            obs_token_ids = tokenizer.apply_chat_template(tool_result, add_generation_prompt=True, return_tensors='pt')[0]
+            # NOTE: skip the sp (and the \n token that comes after it) added by Qwen tokenizer
+            eos_start_idx = torch.nonzero(obs_token_ids == self.tokenizer.eos_token_id)
+            if eos_start_idx.shape[0] > 0:
+                eos_start_idx = eos_start_idx[0].item()
+                obs_token_ids = obs_token_ids[eos_start_idx + 2 : ]
+        else:
+            raise ValueError(f"Neither prompt nor chat appears in {tool_result=}")
+        tool_result_info = {"prompt_token_ids": obs_token_ids, **tool_result}
+
     else:
         raise ValueError(f"Invalid tool_result type: {type(tool_result)=} -- {tool_result}")
 
@@ -218,7 +239,6 @@ class ParallelEnv:
         
         # 1. filtering valid actions
         for idx, act in enumerate(actions):
-            # print(f' [DEBUG vllm output] {idx=}, {act.outputs[0].finish_reason=}, {act.outputs[0].stop_reason=}')
             if act.outputs[0].finish_reason == 'length':
                 done_list.append(True)
                 continue
@@ -237,7 +257,7 @@ class ParallelEnv:
 
         # 2. executing actions (sync or async)
         num_workers = min(self.config.concurrent_workers, len(valid_actions))
-        pbar = tqdm(total=len(valid_actions), desc=f'Executing tool call on {num_workers} workers') if self.config.show_tqdm else None
+        pbar = tqdm(total=len(valid_actions), desc=f'Tool calling on {num_workers} workers') if self.config.show_tqdm else None
         if num_workers <= 1:
             for agi in agent_inputs:
                 subidx = agi['idx']

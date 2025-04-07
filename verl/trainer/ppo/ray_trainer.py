@@ -904,11 +904,6 @@ class RayPPOTrainer(object):
                         else:
                             batch.batch['token_level_rewards'] = batch.batch['token_level_scores']
 
-                        if 'env_reward' in batch.batch.keys():
-                            print(f' [DEBUG reward] rewards_before={batch.batch["token_level_rewards"].mean().item()}')
-                            batch.batch['token_level_rewards'] += batch.batch['env_reward']
-                            print(f' [DEBUG reward] rewards_after={batch.batch["token_level_rewards"].mean().item()}')
-
                         # compute advantages, executed on the driver process
                         batch = compute_advantage(batch,
                                                   adv_estimator=self.config.algorithm.adv_estimator,

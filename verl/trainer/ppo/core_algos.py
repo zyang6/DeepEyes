@@ -106,8 +106,8 @@ def compute_gae_advantage_return(token_level_rewards: torch.Tensor, values: torc
             delta *= eos_mask[:, t]
             lastgaelam = delta + this_step_gamma * this_step_lam * lastgaelam
             advantages_reversed.append(lastgaelam)
-        advantages = torch.stack(advantages_reversed[::-1], dim=1)
 
+        advantages = torch.stack(advantages_reversed[::-1], dim=1)
         returns = advantages + values
         advantages = verl_F.masked_whiten(advantages, eos_mask)
     return advantages, returns
