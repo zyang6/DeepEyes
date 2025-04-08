@@ -100,7 +100,7 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, mul
         prev_stop = sampling_params.stop if sampling_params.stop else []
         agent_sampling_params.stop = prev_stop + config.agent.custom_stop
 
-    if multi_modal_inputs:
+    if multi_modal_inputs is not None:
         multi_modal_inputs = multi_modal_inputs.tolist()
     else:
         multi_modal_inputs = [{}] * len(vllm_inputs)
@@ -200,7 +200,8 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, mul
                 print(f' [DEBUG img] update num_images={len(mm_data["image"])}')
 
             mm_input = obs.get('multi_modal_inputs', {})
-            mm_input_list[idx] = _merge_multi_modal_inputs(mm_input_list[idx], mm_input)
+            if mm_input:
+                mm_input_list[idx] = _merge_multi_modal_inputs(mm_input_list[idx], mm_input)
 
             if running_states[idx].shape[-1] >= max_total_length or vllm_input_list[idx]['prompt_token_ids'].shape[-1] >= max_total_length:
                 active_mask[idx] = False

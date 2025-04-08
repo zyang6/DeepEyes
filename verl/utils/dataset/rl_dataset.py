@@ -187,8 +187,8 @@ class RLHFDataset(Dataset):
                                                                               self.processor.image_token)
         else:
             row_dict.pop(self.image_key, None)
-            row_dict['multi_modal_data'] = {'image': []}
-            row_dict['multi_modal_inputs'] = {}
+            # row_dict['multi_modal_data'] = {'image': []}
+            # row_dict['multi_modal_inputs'] = {}
             raw_prompt = prompt_with_chat_template
 
         input_ids, attention_mask = verl_F.tokenize_and_postprocess_data(prompt=prompt_with_chat_template,
