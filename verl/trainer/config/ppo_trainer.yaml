@@ -105,14 +105,15 @@ actor_rollout_ref:
       do_sample: False # default eager for validation
     agent:
       activate_agent: False
-      single_response_max_tokens: 4096
-      single_obs_max_length: 4096
+      single_response_max_tokens: 32768
+      single_obs_max_length: 32768
       max_turns: 10000
-      concurrent_workers: 16
-      tool_name_key: data_source
+      concurrent_workers: 1
+      tool_name_key: env_name
       tool_meta_key: null
       custom_stop: [ '<|end_of_query|>', '</answer>' ]
       show_tqdm: True
+      vl_model_path: ${actor_rollout_ref.model.path}
 
 critic:
   rollout_n: ${actor_rollout_ref.rollout.n}

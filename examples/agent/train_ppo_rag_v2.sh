@@ -4,7 +4,7 @@ set -x
 DATA_DIR=/cpfs/user/fengyuan/verl_data/r1-searcher
 
 PROJECT_NAME="agent_ppo_debug"
-EXPERIMENT_NAME="PPO_new_template_v22-release"
+EXPERIMENT_NAME="PPO_new_template_gt_return_v0"
 
 # export VLLM_ATTENTION_BACKEND=XFORMERS # vllm + qwen2-7b with flash_attn has some issues
 
@@ -35,6 +35,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=2 \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
+    actor_rollout_ref.actor.clip_ratio_c=30.0 \
     actor_rollout_ref.rollout.agent.activate_agent=True \
     actor_rollout_ref.rollout.agent.tool_name_key=env_name \
     actor_rollout_ref.rollout.agent.single_response_max_tokens=2048 \

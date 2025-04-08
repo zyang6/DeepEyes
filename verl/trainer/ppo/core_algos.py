@@ -89,12 +89,14 @@ def compute_gae_advantage_return(token_level_rewards: torch.Tensor, values: torc
     with torch.no_grad():
         lastgaelam = 0
         advantages_reversed = []
+        returns_reversed = []
         gen_len = token_level_rewards.shape[-1]
 
         # For masked tokens, force gamma=1 and lambda=1, regardless of the values in config
         gamma_masked = eos_mask * gamma + 1 - eos_mask
         lam_masked = eos_mask * lam + 1 - eos_mask
         nextvalues_skip_obs = 0
+        returns_gt = 0
 
         for t in reversed(range(gen_len)):
             next_step_mask = eos_mask[:, t + 1] if t < gen_len - 1 else 1.0
@@ -107,8 +109,11 @@ def compute_gae_advantage_return(token_level_rewards: torch.Tensor, values: torc
             lastgaelam = delta + this_step_gamma * this_step_lam * lastgaelam
             advantages_reversed.append(lastgaelam)
 
+            returns_gt = this_step_gamma * returns_gt + eos_mask[:, t] * token_level_rewards[:, t]
+            returns_reversed.append(returns_gt)
+
         advantages = torch.stack(advantages_reversed[::-1], dim=1)
-        returns = advantages + values
+        returns = torch.stack(returns_reversed[::-1], dim=1)
         advantages = verl_F.masked_whiten(advantages, eos_mask)
     return advantages, returns
 

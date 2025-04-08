@@ -4,6 +4,10 @@ from tqdm import tqdm
 from functools import partial
 from concurrent.futures import ThreadPoolExecutor
 
+from verl import DataProto
+from verl.models.transformers.qwen2_vl import get_rope_index
+from verl.utils import hf_tokenizer, hf_processor
+from verl.utils.dataset.rl_dataset import process_image
 from verl.utils.torch_functional import get_eos_mask, pad_2d_list_to_length
 from verl.workers.agent.tool_envs import ToolBase
 
@@ -27,7 +31,61 @@ def _concat_vllm_input(prompt_token_ids, response_token_ids, tokenizer=None):
             response_token_ids.cpu().numpy(),
         ], axis=-1)
 
-def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sampling_params):
+
+def _merge_multi_modal_inputs(mm_input, other):
+    if not mm_input and not other:
+        return {}
+    elif len(mm_input) == 0 and len(other) > 0:
+        return other
+    elif len(mm_input) > 0 and len(other) == 0:
+        return mm_input
+
+    output_dict = {}
+    for key in mm_input.keys():
+        if key not in other.keys():
+            output_dict[key] = mm_input[key]
+            continue
+
+        mm_value = mm_input[key]
+        other_value = other.pop(key)
+        if isinstance(mm_value, np.ndarray) and isinstance(other_value, np.ndarray):
+            merged_value = np.concatenate([mm_value, other_value], axis=0)
+        elif isinstance(mm_value, torch.Tensor) and isinstance(other_value, torch.Tensor):
+            merged_value = torch.cat([mm_value, other_value], dim=0)
+        else:
+            raise ValueError(f"Invalid {type(mm_value)=}, {type(other_value)=}")
+
+        output_dict[key] = merged_value
+    return dict(**output_dict, **other)
+
+
+def _preprocess_multi_modal_inputs(prompt_str, processor, **kwargs):
+    if processor is None or "multi_modal_data" not in kwargs:
+        return prompt_str, prompt_str, {}
+
+    vllm_input_prompt = prompt_str.replace('<image>', '<|vision_start|><|image_pad|><|vision_end|>')
+    input_mm_data = kwargs.get("multi_modal_data", {"image": []})
+    input_mm_data["image"] = [process_image(image) for image in input_mm_data['image']]
+    image_inputs = processor.image_processor(input_mm_data["image"], return_tensors='pt')
+    image_grid_thw = image_inputs['image_grid_thw']
+    mm_inputs = {key: val for key, val in image_inputs.items()}
+
+    if image_grid_thw is not None:
+        merge_length = processor.image_processor.merge_size**2
+        index = 0
+        while '<image>' in prompt_str:
+            prompt_str = prompt_str.replace(
+                '<image>',
+                '<|vision_start|>' + '<|placeholder|>' * (image_grid_thw[index].prod() // merge_length) +
+                '<|vision_end|>',
+                1,
+            )
+            index += 1
+        prompt_str = prompt_str.replace('<|placeholder|>', processor.image_token)
+    return vllm_input_prompt, prompt_str, mm_inputs
+
+
+def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, multi_modal_inputs, sampling_params):
     agent_sampling_params = sampling_params.clone()
     agent_sampling_params.detokenize = True
     agent_sampling_params.skip_special_tokens = False
@@ -42,14 +100,24 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
         prev_stop = sampling_params.stop if sampling_params.stop else []
         agent_sampling_params.stop = prev_stop + config.agent.custom_stop
 
-    env = ParallelEnv(config.agent, tokenizer)
+    if multi_modal_inputs:
+        multi_modal_inputs = multi_modal_inputs.tolist()
+    else:
+        multi_modal_inputs = [{}] * len(vllm_inputs)
+
+    tokenizer = hf_tokenizer(config.agent.vl_model_path)
+    processor = hf_processor(config.agent.vl_model_path)
+
+    env = ParallelEnv(config.agent, tokenizer, processor)
     env.reset(prompts, n=sampling_params.n)
     batch_size = len(vllm_inputs)
     vllm_input_list = []
     running_states = []
     running_action_masks = []
+    running_attn_masks = []
     reward_tensor_list = []
     active_mask = []
+    mm_input_list = []
 
     # interleaving inputs if sampling_params.n > 1
     for i in range(batch_size):
@@ -59,9 +127,11 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
             running_states.append(prompt_ids)
             prompt_mask = prompts.batch['attention_mask'][i, :]
             running_action_masks.append(prompt_mask)
+            running_attn_masks.append(prompt_mask)
             reward_tensor = torch.zeros_like(prompt_ids, dtype=torch.float)
             reward_tensor_list.append(reward_tensor)
             active_mask.append(True)
+            mm_input_list.append(multi_modal_inputs[i])
 
     max_total_length = config.prompt_length + config.response_length
     for step in range(config.agent.max_turns):
@@ -94,7 +164,7 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
 
             action_mask = torch.ones_like(response_token_ids, dtype=torch.int64, device=running_action_masks[idx].device)
             running_action_masks[idx] = torch.cat([running_action_masks[idx], action_mask])
-            # print(f' [DEBUG resp] resp_size={response_token_ids.shape[-1]}, total_size={running_states[idx].shape[-1]}')
+            running_attn_masks[idx] = torch.cat([running_attn_masks[idx], action_mask])
 
             # Ensure the last token is not obs
             if done or step == config.agent.max_turns - 1:
@@ -102,32 +172,35 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
                 continue
 
             # process obs tokens and images
-            if 'prompt_token_ids' in obs:
-                obs_token_ids = obs['prompt_token_ids'].to(running_states[idx].device)
-                if len(obs_token_ids) > config.agent.single_obs_max_length:
-                    print("[WARNING] OBSERVATION TOO LONG, CONSIDER CHANGING YOUR CONFIG")
-
-                running_states[idx] = torch.cat([running_states[idx], obs_token_ids])
+            if 'prompt_token_ids_vllm' in obs.keys():
+                obs_token_ids = obs['prompt_token_ids_vllm']
                 vllm_input_list[idx]['prompt_token_ids'] = _concat_vllm_input(
                     vllm_input_list[idx]['prompt_token_ids'], 
                     obs_token_ids,
                     tokenizer=tokenizer,
                 )
 
+            if 'prompt_token_ids_model' in obs.keys():
+                obs_token_ids = obs['prompt_token_ids_model'].to(running_states[idx].device)
+                running_states[idx] = torch.cat([running_states[idx], obs_token_ids])
+
                 obs_reward = torch.zeros(len(obs_token_ids), dtype=torch.float, device=reward_tensor_list[idx].device)
                 reward_tensor_list[idx] = torch.cat([reward_tensor_list[idx], obs_reward], dim=-1)
 
                 obs_mask = torch.zeros(len(obs_token_ids), dtype=torch.int64, device=running_action_masks[idx].device)
                 running_action_masks[idx] = torch.cat([running_action_masks[idx], obs_mask])
-                # print(f' [DEBUG obs] obs_size={len(obs_token_ids)}, total_size={running_states[idx].shape[-1]}')
+                attn_mask = torch.ones(len(obs_token_ids), dtype=torch.int64, device=running_attn_masks[idx].device)
+                running_attn_masks[idx] = torch.cat([running_attn_masks[idx], attn_mask])
 
-            # TODO: check whether the truncation is correct here
-            mm = obs.get('multi_modal_data', {})
-            if 'image' in mm.keys():
+            mm_data = obs.get('multi_modal_data', {})
+            if 'image' in mm_data.keys():
                 if 'multi_modal_data' not in vllm_input_list[idx]:
                     vllm_input_list[idx]['multi_modal_data'] = {"image": []}
-                vllm_input_list[idx]['multi_modal_data']['image'] += mm['image']
-                print(f' [DEBUG img] update num_images={len(mm["image"])}')
+                vllm_input_list[idx]['multi_modal_data']['image'] += mm_data['image']
+                print(f' [DEBUG img] update num_images={len(mm_data["image"])}')
+
+            mm_input = obs.get('multi_modal_inputs', {})
+            mm_input_list[idx] = _merge_multi_modal_inputs(mm_input_list[idx], mm_input)
 
             if running_states[idx].shape[-1] >= max_total_length or vllm_input_list[idx]['prompt_token_ids'].shape[-1] >= max_total_length:
                 active_mask[idx] = False
@@ -136,14 +209,44 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
     target_device = prompts.batch['input_ids'].device
     running_states = [state[: max_total_length] for state in running_states]
     state_tensor = pad_2d_list_to_length(running_states, tokenizer.pad_token_id, max_total_length).to(target_device)
+
     running_action_masks = [mask[: max_total_length] for mask in running_action_masks]
     action_mask_tensor = pad_2d_list_to_length(running_action_masks, 0, max_total_length).to(target_device)
+
+    running_attn_masks = [mask[: max_total_length] for mask in running_attn_masks]
+    attn_mask_tensor = pad_2d_list_to_length(running_attn_masks, 0, max_total_length).to(target_device)
+
+    # NOTE: this could be buggy for non-qwen models
+    # Force using mrope for all data
+    position_ids_list = [
+        get_rope_index(
+            processor,
+            input_ids=state_tensor[i, :],
+            image_grid_thw=mm_input_list[i].get("image_grid_thw", None),
+            video_grid_thw=mm_input_list[i].get("video_grid_thw", None),
+            second_per_grid_ts=mm_input_list[i].get("second_per_grid_ts", None),
+            attention_mask=attn_mask_tensor[i, :],
+        ) for i in range(batch_size * sampling_params.n)
+    ]
+    # (n*bs, 3, seq_len)
+    position_ids_tensor = torch.stack(position_ids_list, dim=0)
+
     reward_tensor_list = [reward[: max_total_length] for reward in reward_tensor_list]
     reward_tensor = pad_2d_list_to_length(reward_tensor_list, 0.0, max_total_length).to(target_device)
-    return state_tensor[:, -config.response_length: ], action_mask_tensor, reward_tensor[:, -config.response_length: ]
+
+    return DataProto.from_dict(
+        tensors={
+            "response": state_tensor[:, -config.response_length: ],
+            "action_mask": action_mask_tensor,
+            "attention_mask": attn_mask_tensor,
+            "position_ids": position_ids_tensor,
+            "env_reward": reward_tensor[:, -config.response_length: ],
+        },
+        non_tensors={"multi_modal_inputs": mm_input_list}
+    )
 
 
-def execute_tool_call(sample, tokenizer=None, pbar=None):
+def execute_tool_call(sample, tokenizer=None, processor=None, pbar=None):
     action_string = sample.get('action', '')
     tool = sample.get('tool', None)
     agent_meta = sample.get('agent_meta', {})
@@ -160,8 +263,11 @@ def execute_tool_call(sample, tokenizer=None, pbar=None):
 
     elif isinstance(tool_result, str):
         # Format 1: text output
-        obs_token_ids = tokenizer.encode(tool_result)
-        tool_result_info = {"prompt_token_ids": torch.tensor(obs_token_ids)}
+        obs_token_ids = tokenizer.encode(tool_result, add_special_tokens=False)
+        tool_result_info = {
+            "prompt_token_ids_vllm": torch.tensor(obs_token_ids),
+            "prompt_token_ids_model": torch.tensor(obs_token_ids),
+        }
 
     elif isinstance(tool_result, list) and isinstance(tool_result[0], dict):
         # Format 2: [{"role": "...", "content": "..."}, ...]
@@ -174,26 +280,49 @@ def execute_tool_call(sample, tokenizer=None, pbar=None):
             obs_token_ids = obs_token_ids[eos_start_idx + 2 : ]
         else:
             raise ValueError(f"tool [{tool.name}] returned type List[str] output must be in openai/qwen format : {tool_result}")
-        tool_result_info = {"prompt_token_ids": obs_token_ids}
+
+        tool_result_info = {
+            "prompt_token_ids_vllm": obs_token_ids,
+            "prompt_token_ids_model": obs_token_ids,
+        }
 
     elif isinstance(tool_result, dict):
         # Format 3: {"prompt": "...", "chat": [{"role": "...", "content": "..."}, ...], "multi_modal_data": ...}
-        assert "prompt" in tool_result or 'chat' in tool_result, f"Neither `prompt` or `chat` in {tool_result=}"
+        assert "prompt" in tool_result or 'chat' in tool_result, f"Neither `prompt` nor `chat` in {tool_result=}"
         prompt_str = tool_result.pop("prompt", "")
         chat_list = tool_result.pop("chat", [])
 
         if len(prompt_str) > 0:
-            obs_token_ids = tokenizer.encode(prompt_str, return_tensors='pt')[0]
+            prompt_str_vllm, prompt_str_model, mm_inputs = _preprocess_multi_modal_inputs(prompt_str, processor, **tool_result)
+            obs_token_ids_vllm = tokenizer.encode(prompt_str_vllm, add_special_tokens=False, return_tensors='pt')[0]
+            obs_token_ids_model = tokenizer.encode(prompt_str_model, add_special_tokens=False, return_tensors='pt')[0]
+
         elif len(chat_list) > 0:
-            obs_token_ids = tokenizer.apply_chat_template(tool_result, add_generation_prompt=True, return_tensors='pt')[0]
+            obs_str = tokenizer.apply_chat_template(tool_result['chat'], add_generation_prompt=True, tokenize=False)
+            obs_str_vllm, obs_str_model, mm_inputs = _preprocess_multi_modal_inputs(obs_str, processor, **tool_result)
+            obs_token_ids_vllm = tokenizer.encode(obs_str_vllm, add_special_tokens=False, return_tensors='pt')[0]
+            obs_token_ids_model = tokenizer.encode(obs_str_model, add_special_tokens=False, return_tensors='pt')[0]
+
             # NOTE: skip the sp (and the \n token that comes after it) added by Qwen tokenizer
-            eos_start_idx = torch.nonzero(obs_token_ids == self.tokenizer.eos_token_id)
+            eos_start_idx = torch.nonzero(obs_token_ids_vllm == self.tokenizer.eos_token_id)
             if eos_start_idx.shape[0] > 0:
                 eos_start_idx = eos_start_idx[0].item()
-                obs_token_ids = obs_token_ids[eos_start_idx + 2 : ]
+                obs_token_ids_vllm = obs_token_ids_vllm[eos_start_idx + 2 : ]
+
+            eos_start_idx = torch.nonzero(obs_token_ids_model == self.tokenizer.eos_token_id)
+            if eos_start_idx.shape[0] > 0:
+                eos_start_idx = eos_start_idx[0].item()
+                obs_token_ids_model = obs_token_ids_model[eos_start_idx + 2 : ]
+
         else:
             raise ValueError(f"Neither prompt nor chat appears in {tool_result=}")
-        tool_result_info = {"prompt_token_ids": obs_token_ids, **tool_result}
+
+        tool_result_info = {
+            "prompt_token_ids_vllm": obs_token_ids_vllm,
+            "prompt_token_ids_model": obs_token_ids_model,
+            "multi_modal_inputs": mm_inputs,
+            **tool_result   # multi_modal_data
+        }
 
     else:
         raise ValueError(f"Invalid tool_result type: {type(tool_result)=} -- {tool_result}")
@@ -208,9 +337,11 @@ class ParallelEnv:
     The interface intentionally designed to be the similar to : https://github.com/openai/gym
     Hope this could be easier to use for RLers.
     """
-    def __init__(self, env_config, tokenizer, **kwargs):
+    def __init__(self, env_config, tokenizer, processor, **kwargs):
         self.config = env_config
         self.tokenizer = tokenizer
+        self.processor = processor
+
         # type: List[ Dict[ Str, ToolBase subclasses ] ]
         self.tools = []
         self.agent_meta = []
@@ -242,6 +373,11 @@ class ParallelEnv:
             if act.outputs[0].finish_reason == 'length':
                 done_list.append(True)
                 continue
+
+            if len(act.outputs[0].token_ids) == 0:
+                done_list.append(True)
+                continue
+
             done_list.append(False)
             valid_indices.append(idx)
             valid_actions.append(act.outputs[0].text)
@@ -261,12 +397,12 @@ class ParallelEnv:
         if num_workers <= 1:
             for agi in agent_inputs:
                 subidx = agi['idx']
-                obs, reward, done, info = execute_tool_call(agi, self.tokenizer, pbar=pbar)
+                obs, reward, done, info = execute_tool_call(agi, self.tokenizer, self.processor, pbar=pbar)
                 obs_list[subidx] = obs
                 reward_list[subidx] = reward
                 done_list[subidx] |= done
         else:
-            partial_tool_func = partial(execute_tool_call, tokenizer=self.tokenizer, pbar=pbar)
+            partial_tool_func = partial(execute_tool_call, tokenizer=self.tokenizer, processor=self.processor, pbar=pbar)
             with ThreadPoolExecutor(max_workers=num_workers) as executor:
                 raw_outputs = list(executor.map(partial_tool_func, agent_inputs))
             for agi, raw in zip(agent_inputs, raw_outputs):

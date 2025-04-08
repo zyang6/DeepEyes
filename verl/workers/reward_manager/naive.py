@@ -75,7 +75,7 @@ class NaiveRewardManager:
 
         reward_tensor = torch.zeros_like(data.batch['responses'], dtype=torch.float32)
 
-        action_or_attn_mask = data.batch['action_mask'] # if 'action_mask' in data.batch.keys() else data.batch['attention_mask']
+        action_or_attn_mask = data.batch['action_mask'] if 'action_mask' in data.batch.keys() else data.batch['attention_mask']
         if 'env_reward' in data.batch.keys():
             reward_tensor += data.batch['env_reward']
             print(f' [DEBUG reward] mean={reward_tensor.mean().item()}, min={reward_tensor.min().item()}, max={reward_tensor.max().item()}')
@@ -137,7 +137,7 @@ class NaiveRewardManager:
             # )
 
             # debug_output_str = json.dumps(debug_output, ensure_ascii=False)
-            # with open('/cpfs/user/fengyuan/code/github/verl/checkpoints/agent_ppo_debug/ppo_rewards_32b.jsonl', 'a+') as fout:
+            # with open('/cpfs/user/fengyuan/code/github/verl/checkpoints/agent_ppo_debug/ppo_rewards_gt7b.jsonl', 'a+') as fout:
             #     fout.write(debug_output_str + '\n')
 
             # if data_source not in already_print_data_sources:

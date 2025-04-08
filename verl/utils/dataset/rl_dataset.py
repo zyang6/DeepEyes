@@ -163,7 +163,7 @@ class RLHFDataset(Dataset):
 
         prompt_with_chat_template = self.tokenizer.apply_chat_template(chat, add_generation_prompt=True, tokenize=False)
 
-        is_multi_modal = self.image_key in row_dict
+        is_multi_modal = self.image_key in row_dict and len(row_dict[self.image_key]) > 0
         if is_multi_modal:  # expand image token
             raw_prompt = prompt_with_chat_template.replace('<image>', '<|vision_start|><|image_pad|><|vision_end|>')
             row_dict['multi_modal_data'] = {'image': [process_image(image) for image in row_dict.pop(self.image_key)]}
@@ -186,6 +186,9 @@ class RLHFDataset(Dataset):
                 prompt_with_chat_template = prompt_with_chat_template.replace('<|placeholder|>',
                                                                               self.processor.image_token)
         else:
+            row_dict.pop(self.image_key, None)
+            row_dict['multi_modal_data'] = {'image': []}
+            row_dict['multi_modal_inputs'] = {}
             raw_prompt = prompt_with_chat_template
 
         input_ids, attention_mask = verl_F.tokenize_and_postprocess_data(prompt=prompt_with_chat_template,
