@@ -246,7 +246,7 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, mul
             "position_ids": position_ids_tensor,
             "env_reward": reward_tensor[:, -config.response_length: ],
         },
-        non_tensors={"multi_modal_inputs": mm_input_list}
+        non_tensors={"multi_modal_inputs": mm_input_list} if processor is not None else None
     )
 
 
