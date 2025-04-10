@@ -19,14 +19,14 @@ class RAGEngineEnvV2(ToolBase):
         "http://10.39.13.224:25127/queries",
         "http://10.39.13.224:25128/queries",
 
-        "http://10.39.5.6:25111/queries",
-        "http://10.39.5.6:25112/queries",
-        "http://10.39.5.6:25113/queries",
-        "http://10.39.5.6:25114/queries",
-        "http://10.39.5.6:25115/queries",
-        "http://10.39.5.6:25116/queries",
-        "http://10.39.5.6:25117/queries",
-        "http://10.39.5.6:25118/queries",
+        # "http://10.39.5.6:25111/queries",
+        # "http://10.39.5.6:25112/queries",
+        # "http://10.39.5.6:25113/queries",
+        # "http://10.39.5.6:25114/queries",
+        # "http://10.39.5.6:25115/queries",
+        # "http://10.39.5.6:25116/queries",
+        # "http://10.39.5.6:25117/queries",
+        # "http://10.39.5.6:25118/queries",
     ]
 
     topk = 3

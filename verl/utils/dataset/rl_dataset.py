@@ -166,6 +166,7 @@ class RLHFDataset(Dataset):
         is_multi_modal = self.image_key in row_dict and len(row_dict[self.image_key]) > 0
         if is_multi_modal:  # expand image token
             raw_prompt = prompt_with_chat_template.replace('<image>', '<|vision_start|><|image_pad|><|vision_end|>')
+            row_dict['origin_multi_modal_data'] = {"image": row_dict.get(self.image_key)}
             row_dict['multi_modal_data'] = {'image': [process_image(image) for image in row_dict.pop(self.image_key)]}
             image_inputs = self.processor.image_processor(row_dict['multi_modal_data']['image'], return_tensors='pt')
             image_grid_thw = image_inputs['image_grid_thw']
