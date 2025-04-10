@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from verl import DataProto
 from verl.models.transformers.qwen2_vl import get_rope_index
+from verl.utils.model import compute_position_id_with_mask
 from verl.utils import hf_tokenizer, hf_processor
 from verl.utils.dataset.rl_dataset import process_image
 from verl.utils.torch_functional import get_eos_mask, pad_2d_list_to_length
@@ -217,20 +218,22 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, mul
     running_attn_masks = [mask[: max_total_length] for mask in running_attn_masks]
     attn_mask_tensor = pad_2d_list_to_length(running_attn_masks, 0, max_total_length).to(target_device)
 
-    # NOTE: this could be buggy for non-qwen models
-    # Force using mrope for all data
-    position_ids_list = [
-        get_rope_index(
-            processor,
-            input_ids=state_tensor[i, :],
-            image_grid_thw=mm_input_list[i].get("image_grid_thw", None),
-            video_grid_thw=mm_input_list[i].get("video_grid_thw", None),
-            second_per_grid_ts=mm_input_list[i].get("second_per_grid_ts", None),
-            attention_mask=attn_mask_tensor[i, :],
-        ) for i in range(batch_size * sampling_params.n)
-    ]
-    # (n*bs, 3, seq_len)
-    position_ids_tensor = torch.stack(position_ids_list, dim=0)
+    if processor is not None:
+        # For Qwen-VL: (n*bs, 3, seq_len)
+        position_ids_list = [
+            get_rope_index(
+                processor,
+                input_ids=state_tensor[i, :],
+                image_grid_thw=mm_input_list[i].get("image_grid_thw", None),
+                video_grid_thw=mm_input_list[i].get("video_grid_thw", None),
+                second_per_grid_ts=mm_input_list[i].get("second_per_grid_ts", None),
+                attention_mask=attn_mask_tensor[i, :],
+            ) for i in range(batch_size * sampling_params.n)
+        ]
+        position_ids_tensor = torch.stack(position_ids_list, dim=0)
+    else:
+        # For LM: (bs, seq_len)
+        position_ids_tensor = compute_position_id_with_mask(attn_mask_tensor)
 
     reward_tensor_list = [reward[: max_total_length] for reward in reward_tensor_list]
     reward_tensor = pad_2d_list_to_length(reward_tensor_list, 0.0, max_total_length).to(target_device)
