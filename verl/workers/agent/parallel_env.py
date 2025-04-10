@@ -9,7 +9,7 @@ from verl.models.transformers.qwen2_vl import get_rope_index
 from verl.utils.model import compute_position_id_with_mask
 from verl.utils import hf_tokenizer, hf_processor
 from verl.utils.dataset.rl_dataset import process_image
-from verl.utils.torch_functional import get_eos_mask, pad_2d_list_to_length
+from verl.utils.torch_functional import pad_2d_list_to_length
 from verl.workers.agent.tool_envs import ToolBase
 
 def _concat_vllm_input(prompt_token_ids, response_token_ids, tokenizer=None):
