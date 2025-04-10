@@ -253,13 +253,12 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, mul
 def execute_tool_call(sample, tokenizer=None, processor=None, pbar=None):
     action_string = sample.get('action', '')
     tool = sample.get('tool', None)
-    agent_meta = sample.get('agent_meta', {})
 
     # non-agent data
     if action_string == '' or tool is None:
         return {}, 0.0, True, {}
 
-    tool_result, reward, done, info = tool.execute(action_string, meta=agent_meta)
+    tool_result, reward, done, info = tool.execute(action_string)
 
     # post-process
     if not tool_result:
@@ -348,7 +347,6 @@ class ParallelEnv:
 
         # type: List[ Dict[ Str, ToolBase subclasses ] ]
         self.tools = []
-        self.agent_meta = []
 
     def step(self, actions):
         """
@@ -392,7 +390,6 @@ class ParallelEnv:
                 idx=idx,
                 action=action,
                 tool=self.tools[idx],
-                agent_meta=self.agent_meta[idx],
             ))
 
         # 2. executing actions (sync or async)
@@ -420,25 +417,17 @@ class ParallelEnv:
 
     def reset(self, prompts, n=1):
         self.tools = []
-        self.agent_meta = []
         print(f' [DEBUG reset] {prompts.batch.keys()=}, {prompts.non_tensor_batch.keys()=}, {prompts.meta_info.keys()=}')
 
         reset_output_list = []
         for i in range(len(prompts)):
             for _ in range(n):
                 data_item = prompts[i]  # DataProtoItem
-
-                if self.config.tool_meta_key:
-                    tool_meta = data_item.non_tensor_batch.get(self.config.tool_meta_key, None)
-                else:
-                    tool_meta = None
-                self.agent_meta.append(tool_meta)
-
                 tool_name = data_item.non_tensor_batch.get(self.config.tool_name_key, '')
                 if tool_name:
                     # init tools from config field `tool_name_key`
                     tool_fns = ToolBase.create(tool_name)
-                    reset_output = tool_fns.reset(tool_meta)
+                    reset_output = tool_fns.reset(data_item)
                     self.tools.append(tool_fns)
                     reset_output_list.append(reset_output)
                 else:
@@ -453,9 +442,8 @@ class ParallelEnv:
         if self.config.tool_meta_key and self.config.tool_meta_key in prompts.non_tensor_batch.keys():
             prompts.non_tensor_batch.pop(self.config.tool_meta_key)
             print(f' [DEBUG tools] non_gensor_batch pop key={self.config.tool_meta_key}')
-        print(f' [DEBUG tools] {len(self.tools)=}, {len(self.agent_meta)=}')
+        print(f' [DEBUG tools] {len(self.tools)=}')
         return reset_output_list
 
     def close(self):
         self.tools = []
-        self.agent_meta = []
