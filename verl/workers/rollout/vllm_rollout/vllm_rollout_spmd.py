@@ -238,7 +238,6 @@ class vLLMRollout(BaseRollout):
             if self.config.agent.activate_agent:
                 agent_proto = agent_rollout_loop(
                     config=self.config,
-                    tokenizer=self.tokenizer,
                     vllm_engine=self.inference_engine,
                     vllm_inputs=vllm_inputs, 
                     prompts=prompts,

@@ -534,13 +534,16 @@ class RayPPOTrainer(object):
             if 'multi_modal_inputs' in test_batch.non_tensor_batch.keys():
                 test_gen_batch = test_batch.pop(
                     batch_keys=['input_ids', 'attention_mask', 'position_ids'],
-                    non_tensor_batch_keys=['raw_prompt_ids', 'multi_modal_data', 'multi_modal_inputs'],
+                    non_tensor_batch_keys=['raw_prompt_ids', 'multi_modal_data', 'origin_multi_modal_data', 'multi_modal_inputs'],
                 )
             else:
                 test_gen_batch = test_batch.pop(
                     batch_keys=['input_ids', 'attention_mask', 'position_ids'],
                     non_tensor_batch_keys=['raw_prompt_ids'],
                 )
+
+            if 'raw_prompt' in test_batch.non_tensor_batch.keys():
+                test_gen_batch.non_tensor_batch['raw_prompt'] = test_batch.non_tensor_batch['raw_prompt']
 
             if self.config.actor_rollout_ref.rollout.agent.activate_agent:
                 tool_name_key = self.config.actor_rollout_ref.rollout.agent.tool_name_key
@@ -844,13 +847,16 @@ class RayPPOTrainer(object):
                 if 'multi_modal_inputs' in batch.non_tensor_batch.keys():
                     gen_batch = batch.pop(
                         batch_keys=['input_ids', 'attention_mask', 'position_ids'],
-                        non_tensor_batch_keys=['raw_prompt_ids', 'multi_modal_data', 'multi_modal_inputs'],
+                        non_tensor_batch_keys=['raw_prompt_ids', 'multi_modal_data', 'origin_multi_modal_data', 'multi_modal_inputs'],
                     )
                 else:
                     gen_batch = batch.pop(
                         batch_keys=['input_ids', 'attention_mask', 'position_ids'],
                         non_tensor_batch_keys=['raw_prompt_ids'],
                     )
+
+                if 'raw_prompt' in batch.non_tensor_batch.keys():
+                    gen_batch.non_tensor_batch['raw_prompt'] = batch.non_tensor_batch['raw_prompt']
 
                 print(f' [DEBUG config] config={self.config.actor_rollout_ref.rollout.agent}')
                 if self.config.actor_rollout_ref.rollout.agent.activate_agent:

@@ -86,7 +86,7 @@ def _preprocess_multi_modal_inputs(prompt_str, processor, **kwargs):
     return vllm_input_prompt, prompt_str, mm_inputs
 
 
-def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, multi_modal_inputs, sampling_params):
+def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_inputs, sampling_params):
     agent_sampling_params = sampling_params.clone()
     agent_sampling_params.detokenize = True
     agent_sampling_params.skip_special_tokens = False
@@ -110,7 +110,8 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, mul
     processor = hf_processor(config.agent.vl_model_path)
 
     env = ParallelEnv(config.agent, tokenizer, processor)
-    env.reset(prompts, n=sampling_params.n)
+    env.reset(prompts, vllm_inputs, n=sampling_params.n)
+
     batch_size = len(vllm_inputs)
     vllm_input_list = []
     running_states = []
@@ -141,9 +142,9 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, mul
             break
 
         active_indices = [idx for idx, is_active in enumerate(active_mask) if is_active]
-        active_vllm_input = [vinput for vinput, is_active in zip(vllm_input_list, active_mask) if is_active]
+        active_vllm_inputs = [vinput for vinput, is_active in zip(vllm_input_list, active_mask) if is_active]
         actions = vllm_engine.generate(
-            prompts=active_vllm_input,
+            prompts=active_vllm_inputs,
             sampling_params=agent_sampling_params,
             use_tqdm=False
         )
@@ -323,9 +324,10 @@ def execute_tool_call(sample, tokenizer=None, processor=None, pbar=None):
         tool_result_info = {
             "prompt_token_ids_vllm": obs_token_ids_vllm,
             "prompt_token_ids_model": obs_token_ids_model,
-            "multi_modal_inputs": mm_inputs,
             **tool_result   # multi_modal_data
         }
+        if mm_inputs:
+            tool_result_info["multi_modal_inputs"] = mm_inputs
 
     else:
         raise ValueError(f"Invalid tool_result type: {type(tool_result)=} -- {tool_result}")
@@ -415,34 +417,39 @@ class ParallelEnv:
 
         return obs_list, reward_list, done_list, {}
 
-    def reset(self, prompts, n=1):
+    def reset(self, prompts, vllm_inputs, n=1, **kwargs):
         self.tools = []
-        print(f' [DEBUG reset] {prompts.batch.keys()=}, {prompts.non_tensor_batch.keys()=}, {prompts.meta_info.keys()=}')
-
         reset_output_list = []
+        assert len(prompts) == len(vllm_inputs), f"{len(prompts)=}, {len(vllm_inputs)=}"
+
+        num_agent, num_non_agent = 0, 0
         for i in range(len(prompts)):
+            data_item = prompts[i]  # DataProtoItem
+            tool_name = data_item.non_tensor_batch.get(self.config.tool_name_key, '')
+            raw_prompt = data_item.non_tensor_batch.get('raw_prompt', None)
+
+            vllm_input_item = vllm_inputs[i]   # {"prompt_token_ids": ..., "multi_modal_data": ...}
+            multi_modal_data = vllm_input_item.get("multi_modal_data", None)
+            origin_multi_modal_data = data_item.non_tensor_batch.get("origin_multi_modal_data", None)
             for _ in range(n):
-                data_item = prompts[i]  # DataProtoItem
-                tool_name = data_item.non_tensor_batch.get(self.config.tool_name_key, '')
                 if tool_name:
                     # init tools from config field `tool_name_key`
                     tool_fns = ToolBase.create(tool_name)
-                    reset_output = tool_fns.reset(data_item)
+                    reset_output = tool_fns.reset(
+                        raw_prompt=raw_prompt, 
+                        multi_modal_data=multi_modal_data,
+                        origin_multi_modal_data=origin_multi_modal_data,
+                    )
                     self.tools.append(tool_fns)
                     reset_output_list.append(reset_output)
+                    num_agent += 1
                 else:
                     # non-agent data
                     self.tools.append(None)
                     reset_output_list.append(None)
-
-        # NOTE: pop agent keys to prevent batch_size mismatch when n>1
-        if self.config.tool_name_key and self.config.tool_name_key in prompts.non_tensor_batch.keys():
-            prompts.non_tensor_batch.pop(self.config.tool_name_key)
-            print(f' [DEBUG tools] non_gensor_batch pop key={self.config.tool_name_key}')
-        if self.config.tool_meta_key and self.config.tool_meta_key in prompts.non_tensor_batch.keys():
-            prompts.non_tensor_batch.pop(self.config.tool_meta_key)
-            print(f' [DEBUG tools] non_gensor_batch pop key={self.config.tool_meta_key}')
-        print(f' [DEBUG tools] {len(self.tools)=}')
+                    num_non_agent += 1
+        
+        print(f' [DEBUG agent] {num_agent=}, {num_non_agent=}')
         return reset_output_list
 
     def close(self):
