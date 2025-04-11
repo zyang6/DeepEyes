@@ -132,18 +132,21 @@ def compute_score(predict_str: str, ground_truth: str) -> float:
     if answer_len > 10:
         is_format_error = True
 
+    if count_7 == 0:
+        is_format_error = True
+
     # retrieval_pattern = re.compile(r'<\|begin_of_query\|>(.*?)<\|end_of_query\|>', re.DOTALL)
     # retrieval_match = re.search(retrieval_pattern, predict_str)
     # doc_pattern = re.compile(r'<\|begin_of_documents\|>(.*?)<\|end_of_documents\|>', re.DOTALL)
     # doc_match = re.search(doc_pattern, predict_str)
     # retrieval_reward = 0.5 if retrieval_match and doc_match else 0.0
 
-    retrieval_reward = 1.0 if count_7 >= 1 else -1.0
+    retrieval_reward = 0.0 # -1.0 if count_7 >= 1 else 0.0
     # em_score = exact_match.compute(references=[ground_truth], predictions=[answer_text], ignore_case=True, ignore_punctuation=True)
     acc_reward, _ , _ = f1_score(answer_text, ground_truth)
     acc_reward = 2.0 * acc_reward
 
-    format_reward = -1.0 if is_format_error else 0.0
+    format_reward = -2.0 if is_format_error else 0.0
     return format_reward + retrieval_reward + acc_reward
 
 

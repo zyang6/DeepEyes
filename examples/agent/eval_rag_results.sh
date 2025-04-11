@@ -4,7 +4,7 @@ set -x
 DATA_DIR=/cpfs/user/fengyuan/verl_data/r1-searcher
 
 PROJECT_NAME="agent_ppo_debug"
-EXPERIMENT_NAME="R1-Searcher-32k-v10-lambda"
+EXPERIMENT_NAME="PPO_new_template_v2"
 
 # export VLLM_ATTENTION_BACKEND=XFORMERS # vllm + qwen2-7b with flash_attn has some issues
 
@@ -14,7 +14,8 @@ REF_MODEL_PATH=/cpfs/user/fengyuan/code/github/verl/checkpoints/agent_ppo_debug/
 REF_MODEL_PATH=/cpfs/user/fengyuan/backbone/rag/R1-Searcher
 REF_MODEL_PATH=/cpfs/user/fengyuan/backbone/rag/Search-R1
 REF_MODEL_PATH=/cpfs/user/fengyuan/code/github/verl/checkpoints/agent_ppo_debug/PPO_new_template_v2/global_step_128/actor/huggingface
-# REF_MODEL_PATH=/cpfs/user/fengyuan/code/github/verl/checkpoints/agent_ppo_debug/PPO_new_template_v2/global_step_64/actor/huggingface
+REF_MODEL_PATH=/cpfs/user/fengyuan/code/github/verl/checkpoints/agent_ppo_debug/PPO_new_template_v2/global_step_64/actor/huggingface
+# REF_MODEL_PATH=/cpfs/user/fengyuan/code/github/verl/checkpoints/agent_ppo_debug/PPO_new_template_gt_return_v2/global_step_88/actor/huggingface
 
 PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     data.train_files=${DATA_DIR}/train.parquet \

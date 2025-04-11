@@ -543,7 +543,7 @@ class RayPPOTrainer(object):
                 )
 
             if 'raw_prompt' in test_batch.non_tensor_batch.keys():
-                test_gen_batch.non_tensor_batch['raw_prompt'] = test_batch.non_tensor_batch['raw_prompt']
+                test_gen_batch.non_tensor_batch['raw_prompt'] = test_batch.non_tensor_batch.pop['raw_prompt']
 
             if self.config.actor_rollout_ref.rollout.agent.activate_agent:
                 tool_name_key = self.config.actor_rollout_ref.rollout.agent.tool_name_key
@@ -856,13 +856,14 @@ class RayPPOTrainer(object):
                     )
 
                 if 'raw_prompt' in batch.non_tensor_batch.keys():
-                    gen_batch.non_tensor_batch['raw_prompt'] = batch.non_tensor_batch['raw_prompt']
+                    gen_batch.non_tensor_batch['raw_prompt'] = batch.non_tensor_batch.pop('raw_prompt')
+                    print(' [DEBUG raw prompt] raw_prompt pop into gen_batch')
 
                 print(f' [DEBUG config] config={self.config.actor_rollout_ref.rollout.agent}')
                 if self.config.actor_rollout_ref.rollout.agent.activate_agent:
                     tool_name_key = self.config.actor_rollout_ref.rollout.agent.tool_name_key
                     if tool_name_key and tool_name_key in batch.non_tensor_batch.keys():
-                        gen_batch.non_tensor_batch[tool_name_key] = batch.non_tensor_batch[tool_name_key]
+                        gen_batch.non_tensor_batch[tool_name_key] = batch.non_tensor_batch.pop(tool_name_key)
                         print(f' [DEBUG trainer] {gen_batch.non_tensor_batch.keys()=}')
 
                 is_last_step = self.global_steps >= self.total_training_steps

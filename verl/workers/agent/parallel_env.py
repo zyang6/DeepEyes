@@ -425,12 +425,12 @@ class ParallelEnv:
         num_agent, num_non_agent = 0, 0
         for i in range(len(prompts)):
             data_item = prompts[i]  # DataProtoItem
-            tool_name = data_item.non_tensor_batch.get(self.config.tool_name_key, '')
-            raw_prompt = data_item.non_tensor_batch.get('raw_prompt', None)
+            tool_name = data_item.non_tensor_batch.pop(self.config.tool_name_key, '')
+            raw_prompt = data_item.non_tensor_batch.pop('raw_prompt', None)
 
             vllm_input_item = vllm_inputs[i]   # {"prompt_token_ids": ..., "multi_modal_data": ...}
             multi_modal_data = vllm_input_item.get("multi_modal_data", None)
-            origin_multi_modal_data = data_item.non_tensor_batch.get("origin_multi_modal_data", None)
+            origin_multi_modal_data = data_item.non_tensor_batch.pop("origin_multi_modal_data", None)
             for _ in range(n):
                 if tool_name:
                     # init tools from config field `tool_name_key`

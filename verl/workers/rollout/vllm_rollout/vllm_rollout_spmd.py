@@ -303,9 +303,18 @@ class vLLMRollout(BaseRollout):
             },
             batch_size=batch_size)
 
+        if 'raw_prompt' in non_tensor_batch.keys():
+            non_tensor_batch.pop('raw_prompt')
+        if 'multi_modal_data' in non_tensor_batch.keys():
+            non_tensor_batch.pop('multi_modal_data')
+            non_tensor_batch.pop('origin_multi_modal_data')
+
         if self.config.agent.activate_agent:
             batch = batch.update(agent_proto.batch)
             non_tensor_batch.update(agent_proto.non_tensor_batch)
+            tool_name_key = self.config.agent.tool_name_key
+            if tool_name_key and tool_name_key in non_tensor_batch.keys():
+                non_tensor_batch.pop(tool_name_key)
             print(f' [DEBUG agent output proto] {batch.keys()=}, {non_tensor_batch.keys()=}')
 
         # free vllm cache engine
