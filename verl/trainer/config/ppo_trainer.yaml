@@ -118,7 +118,7 @@ actor_rollout_ref:
       concurrent_workers: 1
       tool_name_key: env_name
       tool_meta_key: null
-      custom_stop: [ '<|end_of_query|>', '</answer>' ]
+      custom_stop: [ '<|end_of_query|>', '</answer>', '</action>' ]
       show_tqdm: True
       vl_model_path: ${actor_rollout_ref.model.path}
 
