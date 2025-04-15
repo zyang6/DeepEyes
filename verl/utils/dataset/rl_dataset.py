@@ -74,7 +74,10 @@ def process_image(image: dict, max_pixels: int = 2048 * 2048, min_pixels: int = 
 
 def process_raw_image(image: dict):
     from PIL import Image
-    image = Image.open(BytesIO(image['bytes']))
+    from io import BytesIO
+
+    if isinstance(image, dict):
+        image = Image.open(BytesIO(image['bytes']))
     return image
 
 

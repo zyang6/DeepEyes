@@ -22,15 +22,17 @@ def _concat_vllm_input(prompt_token_ids, response_token_ids, tokenizer=None):
         response_token_ids = torch.masked_select(response_token_ids, valid_token_mask)
 
     if isinstance(prompt_token_ids, torch.Tensor):
-        return torch.cat([
+        output_tensor = torch.cat([
             prompt_token_ids,
             response_token_ids.to(prompt_token_ids.device),
         ], dim=-1)
+        return output_tensor.cpu().numpy().flatten().tolist()
     else:
-        return np.concatenate([
+        output_array = np.concatenate([
             prompt_token_ids,
             response_token_ids.cpu().numpy(),
         ], axis=-1)
+        return output_array.flatten().tolist()
 
 
 def _merge_multi_modal_inputs(mm_input, other):
@@ -70,6 +72,7 @@ def _preprocess_multi_modal_inputs(prompt_str, processor, **kwargs):
     image_inputs = processor.image_processor(input_mm_data["image"], return_tensors='pt')
     image_grid_thw = image_inputs['image_grid_thw']
     mm_inputs = {key: val for key, val in image_inputs.items()}
+    print(f' [DENIG mm_input] {mm_inputs.keys()=}')
 
     if image_grid_thw is not None:
         merge_length = processor.image_processor.merge_size**2
@@ -196,16 +199,18 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
 
             mm_data = obs.get('multi_modal_data', {})
             if 'image' in mm_data.keys():
-                if 'multi_modal_data' not in vllm_input_list[idx]:
+                if 'multi_modal_data' not in vllm_input_list[idx].keys():
                     vllm_input_list[idx]['multi_modal_data'] = {"image": []}
+                print(f' [DEBUG img] {idx=} before update {len(mm_data["image"])=}')
                 vllm_input_list[idx]['multi_modal_data']['image'] += mm_data['image']
-                print(f' [DEBUG img] update num_images={len(mm_data["image"])}')
+                print(f' [DEBUG img] {idx=} after update {len(vllm_input_list[idx]["multi_modal_data"]["image"])=}')
 
             mm_input = obs.get('multi_modal_inputs', {})
             if mm_input:
+                print(f' [DEBUG img] {idx=} merge mm_input {mm_input_list[idx].keys()} + {mm_input.keys()}')
                 mm_input_list[idx] = _merge_multi_modal_inputs(mm_input_list[idx], mm_input)
 
-            if running_states[idx].shape[-1] >= max_total_length or vllm_input_list[idx]['prompt_token_ids'].shape[-1] >= max_total_length:
+            if running_states[idx].shape[-1] >= max_total_length or len(vllm_input_list[idx]['prompt_token_ids']) >= max_total_length:
                 active_mask[idx] = False
 
     env.close()
@@ -278,7 +283,7 @@ def execute_tool_call(sample, tokenizer=None, processor=None, pbar=None):
         obs_token_ids = tokenizer.apply_chat_template(tool_result, add_generation_prompt=True, return_tensors='pt')[0]
 
         # NOTE: skip the sp (and the \n token that comes after it) added by Qwen tokenizer
-        eos_start_idx = torch.nonzero(obs_token_ids == self.tokenizer.eos_token_id)
+        eos_start_idx = torch.nonzero(obs_token_ids == tokenizer.eos_token_id)
         if eos_start_idx.shape[0] > 0:
             eos_start_idx = eos_start_idx[0].item()
             obs_token_ids = obs_token_ids[eos_start_idx + 2 : ]
@@ -302,18 +307,18 @@ def execute_tool_call(sample, tokenizer=None, processor=None, pbar=None):
             obs_token_ids_model = tokenizer.encode(prompt_str_model, add_special_tokens=False, return_tensors='pt')[0]
 
         elif len(chat_list) > 0:
-            obs_str = tokenizer.apply_chat_template(tool_result['chat'], add_generation_prompt=True, tokenize=False)
+            obs_str = tokenizer.apply_chat_template(chat_list, add_generation_prompt=True, tokenize=False)
             obs_str_vllm, obs_str_model, mm_inputs = _preprocess_multi_modal_inputs(obs_str, processor, **tool_result)
             obs_token_ids_vllm = tokenizer.encode(obs_str_vllm, add_special_tokens=False, return_tensors='pt')[0]
             obs_token_ids_model = tokenizer.encode(obs_str_model, add_special_tokens=False, return_tensors='pt')[0]
 
             # NOTE: skip the sp (and the \n token that comes after it) added by Qwen tokenizer
-            eos_start_idx = torch.nonzero(obs_token_ids_vllm == self.tokenizer.eos_token_id)
+            eos_start_idx = torch.nonzero(obs_token_ids_vllm == tokenizer.eos_token_id)
             if eos_start_idx.shape[0] > 0:
                 eos_start_idx = eos_start_idx[0].item()
                 obs_token_ids_vllm = obs_token_ids_vllm[eos_start_idx + 2 : ]
 
-            eos_start_idx = torch.nonzero(obs_token_ids_model == self.tokenizer.eos_token_id)
+            eos_start_idx = torch.nonzero(obs_token_ids_model == tokenizer.eos_token_id)
             if eos_start_idx.shape[0] > 0:
                 eos_start_idx = eos_start_idx[0].item()
                 obs_token_ids_model = obs_token_ids_model[eos_start_idx + 2 : ]
