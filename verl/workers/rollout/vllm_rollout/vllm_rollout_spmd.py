@@ -129,8 +129,8 @@ class vLLMRollout(BaseRollout):
             trust_remote_code=trust_remote_code,
             seed=int(os.getenv("RANK", "0")) // tensor_parallel_size,
             limit_mm_per_prompt=dict(
-                image=self.config.agent.max_turns, 
-                video=self.config.agent.max_turns,
+                image=self.config.agent.max_vllm_images, 
+                video=self.config.agent.max_vllm_videos,
             ),
         )
 

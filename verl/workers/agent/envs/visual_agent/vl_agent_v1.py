@@ -27,6 +27,12 @@ class VLAgentEnvV1(ToolBase):
     answer_start = '<answer>'
     answer_end = '</answer>'
 
+    chat_template = """<|im_end|>
+<|im_start|>user
+{}<|im_end|>
+<|im_start|>assistant
+"""
+
     # <tool_call>\n{"name": "zoom_in", "arguments": {"object": "woman\'s jacket"}}\n</tool_call>
 
     def __init__(self, _name, _desc, _params, **kwargs):
@@ -54,18 +60,26 @@ class VLAgentEnvV1(ToolBase):
 
         if 'output' not in query_results or not query_results['output']:
             print(f' [WARNING] {action_list=} has no query result : {action_list}')
-            chatml = [{"role": "user", "content": "ZOOM IN RESULT IS EMPTY"}]
-            return chatml, 0.0, False, query_results
+            user_msg = self.chat_template.format("ZOOM IN RESULT IS EMPTY")
+            return user_msg, 0.0, False, {}
 
-        query_results = query_results['output'][0]
+        if isinstance(query_results['output'], list):
+            query_results = query_results['output'][0]
+        elif isinstance(query_results['output'], dict):
+            query_results = query_results['output']
+        else:
+            print(f' [WARNING] invalid type for {query_results=}')
+            user_msg = self.chat_template.format("ZOOM IN RESULT IS INVALID")
+            return user_msg, 0.0, False, {}
+
         if not self.validate_bbox(query_results):
-            chatml = [{"role": "user", "content": f"Zoom in bounding box shape is invalid"}]
-            return chatml, 0.0, False, query_results
+            user_msg = self.chat_template.format("ZOOM IN RESULT IS INVALID")
+            return user_msg, 0.0, False, query_results
 
         cropped_pil_image = self.crop_img(pil_img, query_results)
         user_msg = "<image>\n" + self.user_prompt
-        user_msg = [{"role": "user", "content": user_msg}]
-        obs_dict = {"chat": user_msg, "multi_modal_data": {"image": [cropped_pil_image]}}
+        all_user_msg = self.chat_template.format(user_msg)
+        obs_dict = {"prompt": all_user_msg, "multi_modal_data": {"image": [cropped_pil_image]}}
         return obs_dict, 0.0, False, {}
 
     def reset(self, raw_prompt, multi_modal_data, origin_multi_modal_data, **kwargs):
