@@ -60,7 +60,7 @@ class VLAgentEnvV2(ToolBase):
         except Exception as err:
             user_msg = self.chat_template.format("ZOOM IN AREA IS INVALID")
             return user_msg, 0.0, False, {}
-            
+
         user_msg = "<image>\n" + self.user_prompt.format(cropped_bbox)
         all_user_msg = self.chat_template.format(user_msg)
         obs_dict = {"prompt": all_user_msg, "multi_modal_data": {"image": [cropped_image]}}
@@ -79,10 +79,10 @@ class VLAgentEnvV2(ToolBase):
 
         action_string = action_list[0]
         try:
-            action_object = json.loads(action_string)
+            action_object = eval(action_string)
             arguments = action_object['arguments']
             if isinstance(arguments, str):
-                arguments = json.loads(arguments)
+                arguments = eval(arguments)
             if isinstance(arguments, list):
                 arguments = arguments[0]
 
@@ -92,7 +92,7 @@ class VLAgentEnvV2(ToolBase):
                 region = arguments
 
             if isinstance(region, str):
-                region = json.loads(region)
+                region = eval(region)
 
             if isinstance(region, dict):
                 bbox = region['bbox_2d']
@@ -102,7 +102,7 @@ class VLAgentEnvV2(ToolBase):
                 raise ValueError(f'invalid type for {region=} for model')
 
             if isinstance(bbox, str):
-                bbox = json.loads(bbox)
+                bbox = eval(bbox)
             if not self.validate_bbox(*bbox):
                 return None
             return self.maybe_resize_bbox(*bbox)
@@ -121,18 +121,6 @@ class VLAgentEnvV2(ToolBase):
         except Exception as err:
             print(f' [ERROR vl_agent #2] {err=}')
             return False
-
-
-    def crop_img(self, pil_img, action_list):
-        query = action_list[0]
-        query = json.loads(query)
-        region = query['arguments']['region']
-        region = json.loads(region)
-        
-        bbox = region['bbox_2d']
-        left, top, right, bottom = bbox
-        cropped_image = pil_img.crop((left, top, right, bottom))
-        return cropped_image, region
 
 
     def maybe_resize_bbox(self, left, top, right, bottom):
