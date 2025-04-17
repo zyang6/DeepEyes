@@ -100,9 +100,11 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
     agent_sampling_params.max_tokens = max_generated_tokens
 
     # support custom stop specified in dataset, like </search>, ```, etc.
-    if config.agent.custom_stop:
+    custom_stop = list(config.agent.custom_stop)
+    if custom_stop:
         prev_stop = sampling_params.stop if sampling_params.stop else []
-        agent_sampling_params.stop = prev_stop + config.agent.custom_stop
+        agent_sampling_params.stop = prev_stop + custom_stop
+        print(f' [DEBUG stop] {type(prev_stop)=}, {type(custom_stop)=}, {type(agent_sampling_params.stop)=}')
 
     if multi_modal_inputs is not None:
         multi_modal_inputs = multi_modal_inputs.tolist()
