@@ -1,7 +1,7 @@
 set -x
 
 PROJECT_NAME="agent_vlagent"
-EXPERIMENT_NAME="visual_agent_env_v3_model_v2"
+EXPERIMENT_NAME="visual_agent_env_v3_model_v5"
 
 export SAVE_CHECKPOINT_DIR=/diancpfs/user/fengyuan/verl_checkpoints
 # export VLLM_ATTENTION_BACKEND=XFORMERS # vllm + qwen2-7b with flash_attn has some issues
@@ -15,7 +15,7 @@ REF_MODEL_PATH=/cpfs/user/honglingyi/MODEL/Qwen/Qwen2.5-VL-7B-Instruct
 PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     data.train_files=[${VISUAL_DATASET_TRAIN_1},${VISUAL_DATASET_TRAIN_2}] \
     data.val_files=${VISUAL_DATASET_TEST} \
-    data.train_batch_size=256 \
+    data.train_batch_size=128 \
     data.max_prompt_length=4096 \
     data.max_response_length=10240 \
     data.return_raw_chat=True \
@@ -23,7 +23,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     algorithm.kl_ctrl.kl_coef=0.0 \
     actor_rollout_ref.model.path=${REF_MODEL_PATH} \
     actor_rollout_ref.actor.optim.lr=1e-6 \
-    actor_rollout_ref.actor.ppo_mini_batch_size=256 \
+    actor_rollout_ref.actor.ppo_mini_batch_size=128 \
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=1 \
     actor_rollout_ref.actor.use_kl_loss=True \
     actor_rollout_ref.actor.kl_loss_coef=0.0001 \
@@ -35,7 +35,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.name=vllm \
     actor_rollout_ref.rollout.n=8 \
     actor_rollout_ref.rollout.max_num_batched_tokens=32768 \
-    actor_rollout_ref.rollout.gpu_memory_utilization=0.9 \
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.8 \
     actor_rollout_ref.rollout.enforce_eager=False \
     actor_rollout_ref.rollout.free_cache_engine=False \
     actor_rollout_ref.rollout.enable_chunked_prefill=False \

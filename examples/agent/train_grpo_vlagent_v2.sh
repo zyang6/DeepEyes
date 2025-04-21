@@ -4,7 +4,7 @@ set -x
 DATA_DIR=/cpfs/user/honglingyi/DATA/LLM/VL_Agent/parquets
 
 PROJECT_NAME="agent_vlagent"
-EXPERIMENT_NAME="visual_agent_env_v2_model_v2"
+EXPERIMENT_NAME="visual_agent_env_v2_model_v3"
 
 export SAVE_CHECKPOINT_DIR=/diancpfs/user/fengyuan/verl_checkpoints
 # export VLLM_ATTENTION_BACKEND=XFORMERS # vllm + qwen2-7b with flash_attn has some issues
