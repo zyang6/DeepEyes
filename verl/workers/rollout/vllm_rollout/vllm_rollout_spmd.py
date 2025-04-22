@@ -120,7 +120,8 @@ class vLLMRollout(BaseRollout):
             disable_custom_all_reduce=True,
             disable_mm_preprocessor_cache=True,
             skip_tokenizer_init=False,
-            max_model_len=max_model_len + 16384,
+            # max_model_len=max_model_len + 16384,
+            max_model_len=32768,
             load_format=load_format,
             disable_log_stats=config.disable_log_stats,
             max_num_batched_tokens=max_num_batched_tokens,
@@ -128,10 +129,13 @@ class vLLMRollout(BaseRollout):
             enable_prefix_caching=True,
             trust_remote_code=trust_remote_code,
             seed=int(os.getenv("RANK", "0")) // tensor_parallel_size,
-            limit_mm_per_prompt=dict(
-                image=self.config.agent.max_vllm_images, 
-                video=self.config.agent.max_vllm_videos,
-            ),
+            
+            **({
+                "limit_mm_per_prompt": dict(
+                    image=self.config.agent.max_vllm_images, 
+                    video=self.config.agent.max_vllm_videos,
+                ),
+            } if self.config.agent.activate_agent and self.config.agent.max_vllm_images else {})
         )
 
         # Offload vllm model to reduce peak memory usage
