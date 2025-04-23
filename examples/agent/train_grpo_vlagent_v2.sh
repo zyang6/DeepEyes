@@ -14,7 +14,7 @@ VISUAL_DATASET_TEST=/cpfs/user/honglingyi/DATA/LLM/VL_Agent/parquets/vl_agent_V1
 
 # data.train_files=${DATA_DIR}/vl_agent_V1.parquet \
 
-REF_MODEL_PATH=/cpfs/user/honglingyi/MODEL/Qwen/Qwen2.5-VL-7B-Instruct
+REF_MODEL_PATH=/cpfs/user/honglingyi/MODEL/Qwen/Qwen2.5-VL-32B-Instruct
 PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     data.train_files=${VISUAL_DATASET_TRAIN} \
     data.val_files=${VISUAL_DATASET_TEST} \
