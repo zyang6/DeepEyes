@@ -121,7 +121,6 @@ actor_rollout_ref:
     agent:
       activate_agent: False
       single_response_max_tokens: 32768
-      single_obs_max_length: 32768
       max_turns: 50
       concurrent_workers: 1
       tool_name_key: env_name
@@ -129,7 +128,7 @@ actor_rollout_ref:
       custom_stop: []
       show_tqdm: True
       vl_model_path: ${actor_rollout_ref.model.path}
-      max_vllm_images: 50
+      max_vllm_images: 80
       max_vllm_videos: 2
 
 critic:

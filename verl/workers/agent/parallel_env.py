@@ -163,7 +163,7 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
             sampling_params=agent_sampling_params,
             use_tqdm=False
         )
-        observations, rewards, dones, info = env.step(actions)
+        observations, rewards, dones, info = env.step(active_indices, actions)
 
         for idx, obs, act, rew, done in zip(active_indices, observations, actions, rewards, dones):
             # process response token ids
@@ -371,7 +371,7 @@ class ParallelEnv:
         # type: List[ Dict[ Str, ToolBase subclasses ] ]
         self.tools = []
 
-    def step(self, actions):
+    def step(self, active_indices, actions):
         """
         Input:
         - actions: vllm.RequestOutput
@@ -394,7 +394,7 @@ class ParallelEnv:
         valid_actions = []
         
         # 1. filtering valid actions
-        for idx, act in enumerate(actions):
+        for idx, act in zip(active_indices, actions):
             if act.outputs[0].finish_reason == 'length':
                 done_list.append(True)
                 continue

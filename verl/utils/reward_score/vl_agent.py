@@ -160,9 +160,14 @@ def compute_score(predict_str: str, ground_truth: str, extra_info=None) -> float
             print(f' [WARNING] resp format error {response=}')
             acc_reward = 0.0
 
-    tool_reward = 1.0 if count_vision_1 > 0 else 0.0
+    # Penalize for model trying to predict longer answer to hack llm-as-judge
+    if len(answer_text) >= 300:
+        acc_reward = 0.0
+        is_format_error = True
+
+    tool_reward = 1.0 if count_vision_1 > 0 and acc_reward > 0.5 else 0.0
     format_reward = -1.0 if is_format_error else 0.0
-    return 0.8 * acc_reward + 0.2 * format_reward + 0.4 * tool_reward
+    return 1.0 * acc_reward + 0.2 * format_reward + 2.0 * tool_reward
 
 
 if __name__ == '__main__':
