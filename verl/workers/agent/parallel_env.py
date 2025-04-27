@@ -114,13 +114,27 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
         agent_sampling_params.stop = prev_stop + custom_stop
         print(f' [DEBUG stop] {type(prev_stop)=}, {type(custom_stop)=}, {type(agent_sampling_params.stop)=}')
 
+    # Refer to: https://github.com/vllm-project/vllm/issues/1728
+    # and https://github.com/vllm-project/vllm/issues/15976
+    def process_bad_tokens(token_ids, logits, exclude_token_ids=[]):
+        for token_id in exclude_token_ids:
+            logits[token_id] = -9999.999
+        return logits
+
+    # NOTE: tmp for visual agent!
+    exclude_func = partial(process_bad_tokens, exclude_token_ids=[
+        151643,    # <|endoftext|>
+        151644,    # <|im_start|>
+    ])
+    agent_sampling_params.logits_processors = [exclude_func]
+
+    tokenizer = hf_tokenizer(config.agent.vl_model_path)
+    processor = hf_processor(config.agent.vl_model_path)
+
     if multi_modal_inputs is not None:
         multi_modal_inputs = multi_modal_inputs.tolist()
     else:
         multi_modal_inputs = [{}] * len(vllm_inputs)
-
-    tokenizer = hf_tokenizer(config.agent.vl_model_path)
-    processor = hf_processor(config.agent.vl_model_path)
 
     env = ParallelEnv(config.agent, tokenizer, processor)
     env.reset(prompts, vllm_inputs, n=sampling_params.n)
