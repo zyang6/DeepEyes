@@ -113,8 +113,8 @@ def compute_score(predict_str: str, ground_truth: str, extra_info=None) -> float
     if count_think_1 != count_think_2:
         is_format_error = True
 
-    count_vision_1 = predict_str.count("<|vision_start|><|image_pad|><|image_pad|>")
-    count_vision_2 = predict_str.count("<|image_pad|><|image_pad|><|vision_end|>")
+    count_vision_1 = predict_str.count("<|vision_start|><|image_pad|>")
+    count_vision_2 = predict_str.count("<|image_pad|><|vision_end|>")
     if count_vision_1 != count_vision_2:
         is_format_error = True
 
@@ -165,9 +165,10 @@ def compute_score(predict_str: str, ground_truth: str, extra_info=None) -> float
         acc_reward = 0.0
         is_format_error = True
 
+    tool_reward_base = 1.0 if count_vision_1 > 0 else 0.0
     tool_reward = 1.0 if count_vision_1 > 0 and acc_reward > 0.5 else 0.0
     format_reward = -1.0 if is_format_error else 0.0
-    return 1.0 * acc_reward + 0.2 * format_reward + 2.0 * tool_reward
+    return 1.0 * acc_reward + 0.2 * format_reward + 1.0 * tool_reward + 0.2 * tool_reward_base
 
 
 if __name__ == '__main__':

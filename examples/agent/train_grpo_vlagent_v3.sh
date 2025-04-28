@@ -1,7 +1,7 @@
 set -x
 
 PROJECT_NAME="agent_vlagent"
-EXPERIMENT_NAME="visual_agent_env_v3_model_32b_extra_tool_reward_v0"
+EXPERIMENT_NAME="visual_agent_env_v3_model_32b_extra_tool_reward_v1"
 
 export SAVE_CHECKPOINT_DIR=/diancpfs/user/fengyuan/verl_checkpoints
 # export VLLM_ATTENTION_BACKEND=XFORMERS # vllm + qwen2-7b with flash_attn has some issues
@@ -19,6 +19,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     data.max_prompt_length=4096 \
     data.max_response_length=16384 \
     data.return_raw_chat=True \
+    data.filter_overlong_prompts=True \
     algorithm.adv_estimator=grpo \
     actor_rollout_ref.model.path=${REF_MODEL_PATH} \
     actor_rollout_ref.model.use_remove_padding=True \
