@@ -1,4 +1,5 @@
 import re
+import io
 import torch
 import numpy as np
 from copy import deepcopy
@@ -83,7 +84,17 @@ def _preprocess_multi_modal_inputs(prompt_str, processor, **kwargs):
 
     vllm_input_prompt = prompt_str.replace('<image>', '<|vision_start|><|image_pad|><|vision_end|>')
     input_mm_data = kwargs.get("multi_modal_data", {"image": []})
-    input_mm_data["image"] = [process_image(image) for image in input_mm_data['image']]
+    
+    image_info_list = []
+    for img in input_mm_data["image"]:
+        buf = io.BytesIO()
+        img.save(buf, format='PNG')
+        png_bytes = buf.getvalue()
+        buf.close()
+        img_info = {"bytes": png_bytes}
+        image_info_list.append(img_info)
+
+    input_mm_data["image"] = [process_image(img) for img in image_info_list]
     model_inputs = processor(text=[vllm_input_prompt], images=input_mm_data["image"], return_tensors="pt")
     input_ids = model_inputs.pop("input_ids")[0]
     attention_mask = model_inputs.pop("attention_mask")[0]
@@ -125,7 +136,7 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
     #     151644,    # <|im_start|>
     # ])
     # agent_sampling_params.logits_processors = [exclude_func]
-    agent_sampling_params.bad_words = ["<|endoftext|>", "<|im_start|>"]
+    # agent_sampling_params.bad_words = ["<|endoftext|>", "<|im_start|>"]
 
     tokenizer = hf_tokenizer(config.agent.vl_model_path)
     processor = hf_processor(config.agent.vl_model_path)
@@ -235,6 +246,14 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
                 vllm_input_list[idx]['multi_modal_data']['image'] += mm_data['image']
                 print(f' [DEBUG img] {idx=} after update {len(vllm_input_list[idx]["multi_modal_data"]["image"])=}')
 
+                # if len(vllm_input_list[idx]['multi_modal_data']['image']) > 1:
+                #     import random
+                #     randidx = random.randint(0, 1000000)
+                #     for jx, img in enumerate(vllm_input_list[idx]['multi_modal_data']['image']):
+                #         target_filedir = f"/cpfs/user/fengyuan/code/github/verl/debug_images/img_{randidx}_{jx}.png"
+                #         img.save(target_filedir)
+                #         already_saved_images = True
+
             mm_input = obs.get('multi_modal_inputs', {})
             if mm_input:
                 print(f' [DEBUG img] {idx=} merge mm_input {mm_input_list[idx].keys()} + {mm_input.keys()}')
@@ -256,6 +275,7 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
 
     if processor is not None and processor.image_processor.__class__.__name__ == "Qwen2VLImageProcessor":
         # For Qwen-VL: (n*bs, 3, seq_len)
+        print(f' [DEBUG tmp] {state_tensor.shape=}, {attn_mask_tensor.shape=}')
         position_ids_list = [
             get_rope_index(
                 processor,
