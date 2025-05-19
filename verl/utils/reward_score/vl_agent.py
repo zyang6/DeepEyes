@@ -251,7 +251,7 @@ def compute_score(predict_str: str, ground_truth: str, extra_info=None) -> float
             acc_reward = 0.0
 
     # Penalize for model trying to predict longer answer to hack llm-as-judge
-    if len(answer_text) >= 300:
+    if len(answer_text) >= 1000:
         acc_reward = 0.0
         is_format_error = True
 
@@ -259,7 +259,10 @@ def compute_score(predict_str: str, ground_truth: str, extra_info=None) -> float
     tool_reward = 1.0 if count_vision_1 > 0 and acc_reward > 0.5 else 0.0
     format_reward = -1.0 if is_format_error else 0.0
     # reward 1
-    return 0.8 * acc_reward + 0.2 * format_reward + 0.4 * tool_reward_base  
+    # return 0.8 * acc_reward + 0.2 * format_reward + 0.4 * tool_reward_base
+    # reward 2
+    return 0.8 * acc_reward + 0.2 * format_reward + 1.2 * tool_reward
+
     # reward 2 
     # return 1.0 * acc_reward + 0.2 * format_reward + 1.0 * tool_reward + 0.2 * tool_reward_base
     # reward 3
@@ -294,19 +297,16 @@ def compute_common_reasoning(predict_str: str, ground_truth: str, extra_info=Non
     if not answer_text:
         acc_reward = 0.0
         is_format_error = True
-    elif len(answer_text) >= 300:
+    elif len(answer_text) >= 1000:
         acc_reward = 0.0
         is_format_error = True
     else:
-        if len(answer_text.split(',')) != 2:
-            is_format_error = True
-
         question_text = extra_info['question']
         client_idx = random.randint(0, len(client_list) - 1)
         client = client_list[client_idx]
         model_name = model_name_list[client_idx]
         full_prompt = COMMON_VERIFY_PROMPT.format(
-            query="In which country and within which first-level administrative region of that country was this picture taken?",
+            query=question_text,
             gold_ans=ground_truth,
             pred_ans=answer_text,
         )
@@ -336,7 +336,8 @@ def compute_common_reasoning(predict_str: str, ground_truth: str, extra_info=Non
     tool_reward_base = 1.0 if count_vision_1 > 0 else 0.0
     tool_reward = 1.0 if count_vision_1 > 0 and acc_reward > 0.5 else 0.0
     format_reward = -1.0 if is_format_error else 0.0
-    return 0.8 * acc_reward + 0.2 * format_reward + 0.4 * tool_reward_base + 0.4 * tool_reward
+    print(f' [DEBUG] query={extra_info["question"]}, {ground_truth=}, {answer_text=}, {acc_reward=}, {format_reward=}')
+    return 0.8 * acc_reward + 0.2 * format_reward + 1.2 * tool_reward
 
 
 def rule_math_verify(ground_truth, model_answer):
