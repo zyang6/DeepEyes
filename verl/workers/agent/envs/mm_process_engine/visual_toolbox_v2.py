@@ -11,8 +11,9 @@ from math import ceil, floor
 # ToolBase.registry = {}
 
 class VisualToolBoxV2(ToolBase):
-    name = "vl_agent_v3"
+    name = "visual_toolbox_v2"
     # user_prompt = "Here is the cropped image returned after you calling the function {}.\nIf the images provided above are sufficient to answer the user's question, please put your final answer within <answer></answer>. Otherwise you can continue to call tools within <tool_call></tool_call>."
+
     user_prompt = PROMPT.USER_PROMPT_V2
     def __init__(self, _name, _desc, _params, **kwargs):
         super().__init__(
@@ -131,6 +132,7 @@ class VisualToolBoxV2(ToolBase):
             height = bottom - top
             width = right - left
             assert max(height, width) / min(height, width) <= 100, f"aspect ratio error: {left=}, {top=}, {right=}, {bottom=}"
+            assert min(height, width) > 30, f"{height=}, {width=} is too small"
             return True
         except Exception as err:
             print(f' [ERROR vl_agent #2] {err=}')
@@ -161,7 +163,8 @@ class VisualToolBoxV2(ToolBase):
                 return None
             return [new_left, new_top, new_right, new_bottom]
         return [left, top, right, bottom]
-    
+
+
 if __name__ == "__main__":
     # Example usage (for testing)
     tool = VisualToolBox("visual_toolbox", "Tool for image processing", {})

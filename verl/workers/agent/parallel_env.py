@@ -107,6 +107,8 @@ def _preprocess_multi_modal_inputs(prompt_str, processor, **kwargs):
 
 
 def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_inputs, sampling_params):
+    from vllm.distributed import parallel_state as vllm_ps
+
     agent_sampling_params = sampling_params.clone()
     agent_sampling_params.detokenize = True
     agent_sampling_params.skip_special_tokens = False
@@ -174,6 +176,7 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
             mm_input_list.append(deepcopy(multi_modal_inputs[i]))
             tool_call_cnt_list.append(0)
 
+    pg = vllm_ps.get_tp_group()
     max_total_length = config.prompt_length + config.response_length
     for step in range(config.agent.max_turns):
         print(f' [DEBUG 000] {step=}, total={batch_size}, n={sampling_params.n}, num_active={sum(active_mask)}')
@@ -187,7 +190,15 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
             sampling_params=agent_sampling_params,
             use_tqdm=False
         )
-        observations, rewards, dones, info = env.step(active_indices, actions)
+
+        if pg.is_first_rank:
+            obs_results = env.step(active_indices, actions)
+        else:
+            obs_results = None
+
+        obs_results = pg.broadcast_object(obs_results)
+        observations, rewards, dones, info = obs_results
+
 
         for idx, obs, act, rew, done in zip(active_indices, observations, actions, rewards, dones):
             # process response token ids

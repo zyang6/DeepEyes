@@ -2,13 +2,15 @@ from openai import OpenAI
 import requests
 import random
 import re
+import os
 
 from math_verify import parse, verify
 
 openai_api_key = "EMPTY"
 openai_api_base_list = [
-    # "http://172.30.52.123:8000/v1", # 72b-it
-    "http://10.39.3.123:18901/v1",
+    # "http://172.30.52.123:8000/v1",
+    # "http://10.39.3.123:18901/v1",
+    os.environ.get("LLM_AS_A_JUDGE_BASE", "http://10.39.3.123:18901/v1"),
 ]
 
 client_list = []
