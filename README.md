@@ -4,6 +4,8 @@
   <img src="docs/logo-deepeyes.jpg" alt="logo" height="30">
   <span style="font-size: 32px; font-weight: bold;"> DeepEyes: Incentivizing “Thinking with Images” via Reinforcement Learning </span>
 
+  <br>
+
   <a href="xxx.xxx.xx">
     <img src="https://img.shields.io/badge/ArXiv-DeepEyes-brown?logo=arxiv" alt="Paper">
   </a>
