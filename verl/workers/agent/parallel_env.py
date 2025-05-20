@@ -257,14 +257,6 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
                 vllm_input_list[idx]['multi_modal_data']['image'] += mm_data['image']
                 print(f' [DEBUG img] {idx=} after update {len(vllm_input_list[idx]["multi_modal_data"]["image"])=}')
 
-                # if len(vllm_input_list[idx]['multi_modal_data']['image']) > 1:
-                #     import random
-                #     randidx = random.randint(0, 1000000)
-                #     for jx, img in enumerate(vllm_input_list[idx]['multi_modal_data']['image']):
-                #         target_filedir = f"/cpfs/user/fengyuan/code/github/verl/debug_images/img_{randidx}_{jx}.png"
-                #         img.save(target_filedir)
-                #         already_saved_images = True
-
             mm_input = obs.get('multi_modal_inputs', {})
             if mm_input:
                 print(f' [DEBUG img] {idx=} merge mm_input {mm_input_list[idx].keys()} + {mm_input.keys()}')
@@ -286,7 +278,6 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
 
     if processor is not None and processor.image_processor.__class__.__name__ == "Qwen2VLImageProcessor":
         # For Qwen-VL: (n*bs, 3, seq_len)
-        print(f' [DEBUG tmp] {state_tensor.shape=}, {attn_mask_tensor.shape=}')
         position_ids_list = [
             get_rope_index(
                 processor,
@@ -349,7 +340,7 @@ def execute_tool_call(sample, tokenizer=None, processor=None, pbar=None):
         eos_start_idx = torch.nonzero(obs_token_ids == tokenizer.eos_token_id)
         if eos_start_idx.shape[0] > 0:
             eos_start_idx = eos_start_idx[0].item()
-            obs_token_ids = obs_token_ids[eos_start_idx + 2 : ]
+            obs_token_ids = obs_token_ids[eos_start_idx + 1 : ]
         else:
             raise ValueError(f"tool [{tool.name}] returned type List[str] output must be in openai/qwen format : {tool_result}")
 

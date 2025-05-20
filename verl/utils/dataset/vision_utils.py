@@ -33,15 +33,15 @@ def process_raw_image(image: dict):
 
 
 def process_image(image: Union[dict, Image.Image]) -> Image.Image:
-    if isinstance(image, dict):
-        image = Image.open(BytesIO(image['bytes']))
+    # if isinstance(image, dict) and 'bytes' in image.keys():
+    #     image_object = Image.open(BytesIO(image['bytes']))
 
     if isinstance(image, Image.Image):
         return image.convert("RGB")
 
     if "bytes" in image:
         assert "image" not in image, "Cannot have both `bytes` and `image`"
-        image["image"] = BytesIO(image["bytes"])
+        image["image"] = Image.open(BytesIO(image["bytes"]))
 
     return fetch_image(image)
 
