@@ -23,13 +23,14 @@
 ## DeepEyes
 ![](docs/fig2.png)
 
+Key insights:
 - The capability of DeepEyes to think with images is learned via end-to-end reinforcement learning. It is directly guided by outcome reward signals, requires no cold-start or supervised fine-tuning, and does not rely on specialized external model.
 - Although there is no direct supervision applied for intermediate steps, both the grounding IoU and tool-calling accuracy was increased during the RL training stage.
 ![](docs/fig_finding1.svg)
-- The end-to-end RL training boosts performance significantly on high resolution benchmarks, and shows strong generalization for visual grounding, hallucination mitigation, and math problem solving tasks.
-![](docs/bar.png)
+- The end-to-end RL training yields significant performance gain on high resolution benchmarks, and shows strong generalization for visual grounding, hallucination mitigation, and math problem solving tasks.
+![](docs/accuracy_comparison.svg)
 - We observed an emergence of thinking pattern during RL training process, such as visual search for small objects, visual comparisons across different regions, using `image_zoom_in_tools` for answer confirmation, etc.
-![](docs/fig1_screenshot.png)
+![](docs/fig1_sc2.png)
 
 ##  Quick Start
 
