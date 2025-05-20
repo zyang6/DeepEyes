@@ -1,8 +1,8 @@
 
 
 <div align="center">
-  <img src="docs/logo-deepeyes.jpg" alt="logo" height="30">
-  <span style="font-size: 32px; font-weight: bold;"> DeepEyes: Incentivizing “Thinking with Images” via Reinforcement Learning </span>
+  <img src="docs/logo-deepeyes.jpg" alt="logo" height="100">
+  <h1 style="font-size: 32px; font-weight: bold;"> DeepEyes: Incentivizing “Thinking with Images” via Reinforcement Learning </h1>
 
   <br>
 
@@ -82,36 +82,97 @@ bash examples/agent/final_merged_v1v8_thinklite_32b.sh
 
 The training scripts use both [wandb](https://wandb.ai/site/) and [RL Logging Board](https://github.com/HarderThenHarder/RLLoggingBoard) (great work) to visualize the training dynamics.
 
-## Training on Customized Own Datasets or Tools
+## Programming Guide
 
-The code in this repository is a general agentic RL framework based on [VeRL](https://github.com/volcengine/verl), which is designed to fulfill the following needs:
-- High efficient Agent RL training: Agent rollout is asynchronous among all data parallel groups.
-- Allowing multi-modal input in agent observations: This is the key for the RL training of "thinking with images" ability.
-- Allowing hybrid training for agent data with different tools and non-agentic data: Tool usage is not hard-coded in rollout loop, instead, each sample can specify its own tool usage constraint via `env_name` field.
-- Compatible for algorithms: PPO, GRPO, and reinforce++ are supported. We modified the advantage estimation, as well as the policy loss masks, to make it compatible with the interleaved structure of Agentic RL (multi-turn RL) training.
-- Compatible for latest VeRL updates: Unlike some previous agentic RL training framework that encapsulate VeRL as its submodule, we implement agent RL as a pluin
+<details>
+<summary>General Introduction for Codes</summary>
 
-Therefore, it is possible to perform any form of general agentic RL training using our code implementation.
+### General Introduction
+
+The code in this repository is a general agentic RL framework based on [VeRL](https://github.com/volcengine/verl). Apart from DeepEyes, it is possible to perform any form of general agentic RL training using our code implementation.
+
+The code is designed to fulfill the following needs:
+- **High efficient Agent RL training**: Agent rollout is asynchronous among all data parallel groups.
+- **Allowing dynamic multi-modal input in agent observations**: This is the key for the RL training of "thinking with images" ability.
+- **Allowing hybrid training for agent data with different tools and non-agentic data**: Tool usage is not hard-coded in rollout loop, instead, each sample can specify its own tool usage constraint via `env_name` field.
+- **Support for algorithm**: PPO, GRPO, and reinforce++ are supported. We modified the advantage estimation, as well as the policy loss masks, to make it compatible with the interleaved structure of agentic multi-turn RL training.
+- **Compatible for latest VeRL updates**: agentic RL training is implemented as a plugin for VeRL, making it easy to merge with the latest VeRL updates. Once you turn off the plugin switch, the functionality will be no different to the original version of VeRL.
+
+</details>
+
+<details>
+<summary>Training on Customized Datasets</summary>
 
 ### Use your own data
 Add an additional field `env_name` to your data parquet files. The `env_name` of each sample should specify the which tool is allowed to use when performing agent rollout. For non-agent training data, leave the `env_name` to None or empty string.
 
-For DeepEyes style training, `env_name` should be specified as `visual_toolbox_v2`.
+For DeepEyes style training, for example, `env_name` should be specified as `visual_toolbox_v2`.
+
+The rest part is no different to the original VeRL dataset format. Refer to [VeRL official documentation](https://verl.readthedocs.io/en/latest/index.html) for details.
+
+</details>
+
+<details>
+<summary>Training with Customized Tools</summary>
 
 ### Implement your own tools
 Implement your tool function in a new class that inherents `ToolBase` class in [verl/workers/agent/tool_envs.py](verl/workers/agent/tool_envs.py) as its base class.
 
 The subclass MUST include `name` variable, whose value corresponds to the `env_name` field in training data parquet files.
 
-Implement the `execute` and `reset` functions. Refer to [verl/workers/agent/envs/mm_process_engine/visual_toolbox_v2.py](verl/workers/agent/envs/mm_process_engine/visual_toolbox_v2.py) as an examples.
+Implement the `execute` and `reset` functions. Here is an simple example:
+
+Example code:
+```python
+class CustomTool(ToolBase):
+    name = "custom_tool_v0"
+
+    def __init__(self, _name, _desc, _params, **kwargs):
+        super().__init__(name=self.name)
+
+    def execute(self, action_string: str, **kwargs) -> tuple:
+        """
+        Execute the tool functionality based on the LLM generated text.
+        This function is called EACH TIME after vllm.generate
+        
+        Args:
+            action_string: The string generated by LLM via vllm.generate.
+
+        Returns:
+            observation: The structured observation with the processed image.
+            reward: setting a non-zero value if you want to assign a reward to the LAST GENERATED TOKEN in the intermediate steps.
+            done: Whether the episode is terminated.
+            info: Additional info.
+        """
+        pass
+
+    def reset(self, raw_prompt, multi_modal_data, origin_multi_modal_data, **kwargs):
+        """
+        This function is called ONLY ONCE when initializing the tools
+
+        Args:
+            raw_prompt: setting config param `data.return_raw_chat=True` to get raw prompt input.
+            multi_modal_data: refer to vllm documentation for details https://docs.vllm.ai/en/stable/features/multimodal_inputs.html
+            origin_multi_modal_data: VLM vision processor can modify the original images, typically by resizing, when they are too small or too large, use this param if you want to get access to the unmodified vision input.
+        """
+        pass
+```
+
+Refer to [verl/workers/agent/envs/mm_process_engine/visual_toolbox_v2.py](verl/workers/agent/envs/mm_process_engine/visual_toolbox_v2.py) as an example for the `image_zoom_in_tool` in DeepEyes.
+
+</details>
+
+<details>
+<summary>Using latest VeRL code</summary>
 
 ### Using latest VeRL code
-
 In case you want to use the latest VeRL code for training.
 
 ```bash
 git remote add official https://github.com/volcengine/verl.git
 git pull official main
 ```
+
+</details>
 
 ## Citation
