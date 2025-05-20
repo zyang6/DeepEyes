@@ -20,11 +20,11 @@
   </a>
 </div>
 
-> *Logo inspired by oracle bone character "eye".*
+*Logo inspired by oracle bone character "eye".*
 
 ## DeepEyes
+Quote from [https://openai.com/index/thinking-with-images/](https://openai.com/index/thinking-with-images/):
 > They don’t just see an image, they can integrate visual information directly into the reasoning chain.
-> Quote from [https://openai.com/index/thinking-with-images/](https://openai.com/index/thinking-with-images/).
 
 ![](docs/fig2.png)
 
