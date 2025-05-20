@@ -9,16 +9,16 @@
   <a href="xxx.xxx.xx">
     <img src="https://img.shields.io/badge/ArXiv-DeepEyes-brown?logo=arxiv" alt="Paper">
   </a>
-  <a href="xx.yy.zz">
+  <a href="https://huggingface.co/datasets/ChenShawn/DeepEyes-Datasets-47k">
     <img src="https://img.shields.io/badge/🤗 huggingface-Dataset-blue" alt="dataset">
   </a>
-  <a href="xxx.yyy.zzz">
+  <a href="https://huggingface.co/ChenShawn/DeepEyes-7B">
     <img src="https://img.shields.io/badge/🤗 huggingface-Model-purple" alt="checkpoint">
   </a>
+  <a href="https://visual-agent.github.io/">
+    <img src="https://img.shields.io/badge/-HomePage-black?logo=github" alt="checkpoint">
+  </a>
 </div>
-
-## News
-- [May 19th, 2025] Arxiv paper, code, dataset and checkpoint released.
 
 ## Key Insights
 - The capability of DeepEyes to think with images is learned via end-to-end reinforcement learning. It is directly guided by outcome reward signals, requires NO cold-start or supervised fine-tuning, and does not rely on specialized external model.
@@ -64,7 +64,10 @@ vllm serve /path/to/your/local/filedir \
     --disable-log-requests
 ```
 
-Step 2: Build a ray cluster for all of the training nodes. Then use one of the following scripts to start training.
+Step 2: Build a ray cluster for all of the training nodes. Prepare data before starting training. Our training dataset can be downloaded from [huggingface](https://huggingface.co/datasets/ChenShawn/DeepEyes-Datasets-47k).
+
+
+Step 3: Use one of the following scripts to start training.
 
 ```bash
 # your wandb access key here...
@@ -72,6 +75,9 @@ wandb login
 
 # the IP and port for your Qwen-2.5-72B-Instruct vllm serving
 export LLM_AS_A_JUDGE_BASE="http://your.vllm.machine.ip:18901/v1"
+
+# umber of training nodes
+export WORLD_SIZE=8
 
 # config for 7B
 bash examples/agent/final_merged_v1v8_thinklite.sh
@@ -89,7 +95,7 @@ The training scripts use both [wandb](https://wandb.ai/site/) and [RL Logging Bo
 
 ### General Introduction
 
-The code in this repository is a general agentic RL framework based on [VeRL](https://github.com/volcengine/verl). Apart from DeepEyes, it is possible to perform any form of general agentic RL training using our code implementation.
+The code in this repository is a general agentic RL training framework based on [VeRL](https://github.com/volcengine/verl). Apart from DeepEyes, it is possible to perform any form of general agentic RL (multi-turn RL) training using our code implementation.
 
 The code is designed to fulfill the following needs:
 - **High efficient Agent RL training**: Agent rollout is asynchronous among all data parallel groups.
@@ -160,6 +166,12 @@ class CustomTool(ToolBase):
 
 Refer to [verl/workers/agent/envs/mm_process_engine/visual_toolbox_v2.py](verl/workers/agent/envs/mm_process_engine/visual_toolbox_v2.py) as an example for the `image_zoom_in_tool` in DeepEyes.
 
+**Important**: Import your custom tool in [verl/workers/agent/__init__.py](verl/workers/agent/__init__.py)
+
+```python
+from .envs.your_custom_tool import CustomTool
+```
+
 </details>
 
 <details>
@@ -173,6 +185,12 @@ git remote add official https://github.com/volcengine/verl.git
 git pull official main
 ```
 
+Refer to [the main branch](https://github.com/ChenShawn/VeRL-Agent) for latest agent RL updates.
+
 </details>
+
+## Licence
+
+This project is released under [Apache licence](./LICENSE).
 
 ## Citation
