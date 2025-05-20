@@ -20,7 +20,12 @@
   </a>
 </div>
 
+> *Logo inspired by oracle bone character "eye".*
+
 ## DeepEyes
+> They don’t just see an image, they can integrate visual information directly into the reasoning chain.
+> Quote from [https://openai.com/index/thinking-with-images/](https://openai.com/index/thinking-with-images/).
+
 ![](docs/fig2.png)
 
 Key insights:
@@ -29,7 +34,7 @@ Key insights:
 ![](docs/fig_finding1.svg)
 - The end-to-end RL training yields significant performance gain on high resolution benchmarks, and shows strong generalization for visual grounding, hallucination mitigation, and math problem solving tasks.
 ![](docs/accuracy_comparison.svg)
-- We observed an emergence of thinking pattern during RL training process, such as visual search for small objects, visual comparisons across different regions, using `image_zoom_in_tools` for answer confirmation, etc.
+- We observed an emergence of thinking pattern during RL training process, such as visual search for small objects, visual comparisons across different regions, using `image_zoom_in_tools` for answer verification, etc.
 ![](docs/fig1_sc2.png)
 
 ##  Quick Start
@@ -104,7 +109,7 @@ The code is designed to fulfill the following needs:
 - **High efficient Agent RL training**: Agent rollout is asynchronous among all data parallel groups.
 - **Allowing dynamic multi-modal input in agent observations**: This is the key for the RL training of "thinking with images" ability.
 - **Allowing hybrid training for agent data with different tools and non-agentic data**: Tool usage is not hard-coded in rollout loop, instead, each sample can specify its own tool usage constraint via `env_name` field.
-- **Support for algorithm**: PPO, GRPO, and reinforce++ are supported. We modified the advantage estimation, as well as the policy loss masks, to make it compatible with the interleaved structure of agentic multi-turn RL training.
+- **Support for algorithm**: PPO, GRPO, and reinforce++ are supported. We modified the advantage estimation, the policy loss masks, as well as the mrope for Qwen-VL models, to make it compatible with the interleaved structure of agentic multi-turn RL training.
 - **Compatible for latest VeRL updates**: agentic RL training is implemented as a plugin for VeRL, making it easy to merge with the latest VeRL updates. Once you turn off the plugin switch, the functionality will be no different to the original version of VeRL.
 
 </details>
