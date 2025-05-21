@@ -15,9 +15,9 @@
   <a href="https://huggingface.co/ChenShawn/DeepEyes-7B">
     <img src="https://img.shields.io/badge/🤗 huggingface-Model-purple" alt="checkpoint">
   </a>
-  <!-- <a href="https://visual-agent.github.io/">
+  <a href="https://visual-agent.github.io/">
     <img src="https://img.shields.io/badge/-HomePage-black?logo=github" alt="checkpoint">
-  </a> -->
+  </a>
 </div>
 
 *\* Logo inspired by oracle bone character "eye".*
@@ -111,6 +111,22 @@ The code is designed to fulfill the following needs:
 - **Allowing hybrid training for agent data with different tools and non-agentic data**: Tool usage is not hard-coded in rollout loop, instead, each sample can specify its own tool usage constraint via `env_name` field.
 - **Support for algorithm**: PPO, GRPO, and reinforce++ are supported. We modified the advantage estimation, the policy loss masks, as well as the mrope for Qwen-VL models, to make it compatible with the interleaved structure of agentic multi-turn RL training.
 - **Compatible for latest VeRL updates**: agentic RL training is implemented as a plugin for VeRL, making it easy to merge with the latest VeRL updates. Once you turn off the plugin switch, the functionality will be no different to the original version of VeRL.
+
+</details>
+
+<details>
+<summary>Code Navigation</summary>
+
+Reproduction code for our [DeepEyes](https://arxiv.org/abs/2505.14362).
+- Training script: [examples/agent/final_merged_v1v8_thinklite.sh](examples/agent/final_merged_v1v8_thinklite.sh)
+- Tool definition: [verl/workers/agent/envs/mm_process_engine/visual_toolbox_v2.py]
+(verl/workers/agent/envs/mm_process_engine/visual_toolbox_v2.py)
+- Reward definition: [verl/utils/reward_score/vl_agent.py](verl/utils/reward_score/vl_agent.py)
+
+Reproduction code for [R1-Searcher](https://github.com/RUCAIBox/R1-Searcher) using PPO.
+- Training script: [examples/agent/train_ppo_rag_v2.sh](examples/agent/train_ppo_rag_v2.sh)
+- Tool definition: [verl/workers/agent/envs/rag_engine/rag_engine_v2.py](verl/workers/agent/envs/rag_engine/rag_engine_v2.py)
+- Reward definition: [verl/utils/reward_score/agent.py](verl/utils/reward_score/agent.py)
 
 </details>
 

@@ -1,7 +1,7 @@
 set -x
 
 PROJECT_NAME="agent_vlagent"
-EXPERIMENT_NAME="final_merged_v1v8_thinklite_7b_v0"
+EXPERIMENT_NAME="debug_for_single_node"
 
 export SAVE_CHECKPOINT_DIR=/diancpfs/user/fengyuan/verl_checkpoints
 # export VLLM_ATTENTION_BACKEND=XFORMERS # vllm + qwen2-7b with flash_attn has some issues
@@ -18,7 +18,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     +debug=False \
     +vs_debug=False \
     data.train_files=[${VISUAL_DATASET_TRAIN_0_1_2},${VISUAL_DATASET_TRAIN_0_8},${EUREKA_DATASET_TRAIN}] \
-    data.val_files=[${VISUAL_DATASET_TEST}] \
+    data.val_files=[${EUREKA_DATASET_TRAIN}] \
     data.train_batch_size=256 \
     data.max_prompt_length=8192 \
     data.max_response_length=20480 \
