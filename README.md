@@ -15,9 +15,9 @@
   <a href="https://huggingface.co/ChenShawn/DeepEyes-7B">
     <img src="https://img.shields.io/badge/🤗 huggingface-Model-purple" alt="checkpoint">
   </a>
-  <a href="https://visual-agent.github.io/">
+  <!-- <a href="https://visual-agent.github.io/">
     <img src="https://img.shields.io/badge/-HomePage-black?logo=github" alt="checkpoint">
-  </a>
+  </a> -->
 </div>
 
 *\* Logo inspired by oracle bone character "eye".*
@@ -202,3 +202,15 @@ Refer to [the main branch](https://github.com/ChenShawn/VeRL-Agent) for latest a
 This project is released under [Apache licence](./LICENSE).
 
 ## Citation
+
+```
+@article{zheng2025deepeyesincentivizingthinkingimages,
+    title={DeepEyes: Incentivizing "Thinking with Images" via Reinforcement Learning}, 
+    author={Ziwei Zheng, Michael Yang, Jack Hong, Chenxiao Zhao, Guohai Xu, Le Yang, Chao Shen, Xing Yu},
+    year={2025},
+    eprint={2505.14362},
+    archivePrefix={arXiv},
+    primaryClass={cs.CV},
+    url={https://arxiv.org/abs/2505.14362}, 
+}
+```
