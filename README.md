@@ -6,7 +6,7 @@
 
   <br>
 
-  <a href="xxx.xxx.xx">
+  <a href="https://arxiv.org/abs/2505.14362">
     <img src="https://img.shields.io/badge/ArXiv-DeepEyes-brown?logo=arxiv" alt="Paper">
   </a>
   <a href="https://huggingface.co/datasets/ChenShawn/DeepEyes-Datasets-47k">
