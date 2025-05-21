@@ -119,8 +119,7 @@ The code is designed to fulfill the following needs:
 
 Reproduction code for our [DeepEyes](https://arxiv.org/abs/2505.14362).
 - Training script: [examples/agent/final_merged_v1v8_thinklite.sh](examples/agent/final_merged_v1v8_thinklite.sh)
-- Tool definition: [verl/workers/agent/envs/mm_process_engine/visual_toolbox_v2.py]
-(verl/workers/agent/envs/mm_process_engine/visual_toolbox_v2.py)
+- Tool definition: [verl/workers/agent/envs/mm_process_engine/visual_toolbox_v2.py](verl/workers/agent/envs/mm_process_engine/visual_toolbox_v2.py)
 - Reward definition: [verl/utils/reward_score/vl_agent.py](verl/utils/reward_score/vl_agent.py)
 
 Reproduction code for [R1-Searcher](https://github.com/RUCAIBox/R1-Searcher) using PPO.
@@ -208,6 +207,10 @@ In case you want to use the latest VeRL code for training.
 git remote add official https://github.com/volcengine/verl.git
 git pull official main
 ```
+
+As shown in the commit history, we have been doing this for several times to sync latest verl updates.
+
+The last time we sync with the verl main branch was on **April 23, 2025**. In the future, to ensure the reproducibility of our code, we will only do this on dev branch.
 
 </details>
 
