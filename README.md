@@ -193,8 +193,6 @@ git remote add official https://github.com/volcengine/verl.git
 git pull official main
 ```
 
-Refer to [the main branch](https://github.com/ChenShawn/VeRL-Agent) for latest agent RL updates.
-
 </details>
 
 ## Licence
