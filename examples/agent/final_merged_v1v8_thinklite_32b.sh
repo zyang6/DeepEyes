@@ -6,7 +6,7 @@ EXPERIMENT_NAME="final_merged_v1v8_thinklite_32b_v0"
 export SAVE_CHECKPOINT_DIR=/diancpfs/user/fengyuan/verl_checkpoints
 # export VLLM_ATTENTION_BACKEND=XFORMERS # vllm + qwen2-7b with flash_attn has some issues
 
-BASEDIR=/cpfs/user/fengyuan/verl_data/minghao_data
+BASEDIR=/path/to/your/data
 VISUAL_DATASET_TRAIN_0_6_2=${BASEDIR}/data_v0.6.2_reason.parquet
 VISUAL_DATASET_TRAIN_0_1_2=${BASEDIR}/data_0.1.2_visual_toolbox_v2.parquet
 VISUAL_DATASET_TRAIN_0_8=${BASEDIR}/minghao_data_vnew/data_v0.8_visual_toolbox_v2.parquet
@@ -18,7 +18,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     +debug=False \
     +vs_debug=False \
     data.train_files=[${VISUAL_DATASET_TRAIN_0_1_2},${VISUAL_DATASET_TRAIN_0_8},${EUREKA_DATASET_TRAIN}] \
-    data.val_files=[${VISUAL_DATASET_TEST}] \
+    data.val_files=[${EUREKA_DATASET_TRAIN}] \
     data.train_batch_size=256 \
     data.max_prompt_length=8192 \
     data.max_response_length=20480 \
