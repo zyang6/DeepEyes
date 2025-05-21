@@ -2,8 +2,6 @@ set -x
 
 # export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 # export PATH=/cpfs/user/yangminghao/miniforge/envs/agent/bin:$PATH
-export WANDB_API_KEY="7297baed6a9f385f68503a4c398d126443c5c747"
-wandb login
 export DATA_DIR=/cpfs/user/yangminghao/RL/fengyuan/InteractiveRL/data/frozenlake
 export OUTPUT_DIR=/cpfs/user/yangminghao/RL/fengyuan/InteractiveRL/ckpt
 
