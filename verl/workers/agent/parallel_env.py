@@ -229,38 +229,41 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
             tool_call_cnt_list[idx] += 1
 
             # process obs tokens and images
-            if 'prompt_token_ids_vllm' in obs.keys():
-                obs_token_ids = obs['prompt_token_ids_vllm']
+            if 'prompt_token_ids_vllm' in obs.keys() and 'prompt_token_ids_model' in obs.keys():
+                obs_token_ids_vllm = obs['prompt_token_ids_vllm']
+                obs_token_ids_model = obs['prompt_token_ids_model'].to(running_states[idx].device)
+
+                if len(vllm_input_list[idx]['prompt_token_ids']) + len(obs_token_ids_vllm) >= max_total_length:
+                    active_mask[idx] = False
+                    continue
+                if running_states[idx].shape[-1] + len(obs_token_ids_model) >= max_total_length:
+                    active_mask[idx] = False
+                    continue
+
                 vllm_input_list[idx]['prompt_token_ids'] = _concat_vllm_input(
                     vllm_input_list[idx]['prompt_token_ids'], 
-                    obs_token_ids,
+                    obs_token_ids_vllm,
                     tokenizer=tokenizer,
                 )
 
-            if 'prompt_token_ids_model' in obs.keys():
-                obs_token_ids = obs['prompt_token_ids_model'].to(running_states[idx].device)
-                running_states[idx] = torch.cat([running_states[idx], obs_token_ids])
-
-                obs_reward = torch.zeros(len(obs_token_ids), dtype=torch.float, device=reward_tensor_list[idx].device)
+                running_states[idx] = torch.cat([running_states[idx], obs_token_ids_model])
+                obs_reward = torch.zeros(len(obs_token_ids_model), dtype=torch.float, device=reward_tensor_list[idx].device)
                 reward_tensor_list[idx] = torch.cat([reward_tensor_list[idx], obs_reward], dim=-1)
 
-                obs_mask = torch.zeros(len(obs_token_ids), dtype=torch.int64, device=running_action_masks[idx].device)
+                obs_mask = torch.zeros(len(obs_token_ids_model), dtype=torch.int64, device=running_action_masks[idx].device)
                 running_action_masks[idx] = torch.cat([running_action_masks[idx], obs_mask])
-                attn_mask = torch.ones(len(obs_token_ids), dtype=torch.int64, device=running_attn_masks[idx].device)
+                attn_mask = torch.ones(len(obs_token_ids_model), dtype=torch.int64, device=running_attn_masks[idx].device)
                 running_attn_masks[idx] = torch.cat([running_attn_masks[idx], attn_mask])
 
-            mm_data = obs.get('multi_modal_data', {})
-            if 'image' in mm_data.keys():
-                if 'multi_modal_data' not in vllm_input_list[idx].keys():
-                    vllm_input_list[idx]['multi_modal_data'] = {"image": []}
-                print(f' [DEBUG img] {idx=} before update {len(vllm_input_list[idx]["multi_modal_data"]["image"])=}, {len(mm_data["image"])=}')
-                vllm_input_list[idx]['multi_modal_data']['image'] += mm_data['image']
-                print(f' [DEBUG img] {idx=} after update {len(vllm_input_list[idx]["multi_modal_data"]["image"])=}')
+                mm_data = obs.get('multi_modal_data', {})
+                if 'image' in mm_data.keys():
+                    if 'multi_modal_data' not in vllm_input_list[idx].keys():
+                        vllm_input_list[idx]['multi_modal_data'] = {"image": []}
+                    vllm_input_list[idx]['multi_modal_data']['image'] += mm_data['image']
 
-            mm_input = obs.get('multi_modal_inputs', {})
-            if mm_input:
-                print(f' [DEBUG img] {idx=} merge mm_input {mm_input_list[idx].keys()} + {mm_input.keys()}')
-                mm_input_list[idx] = _merge_multi_modal_inputs(mm_input_list[idx], mm_input)
+                mm_input = obs.get('multi_modal_inputs', {})
+                if mm_input:
+                    mm_input_list[idx] = _merge_multi_modal_inputs(mm_input_list[idx], mm_input)
 
             if running_states[idx].shape[-1] >= max_total_length or len(vllm_input_list[idx]['prompt_token_ids']) >= max_total_length:
                 active_mask[idx] = False

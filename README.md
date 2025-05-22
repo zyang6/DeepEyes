@@ -34,7 +34,7 @@ Key insights:
 ![](docs/fig_finding1.svg)
 - The end-to-end RL training yields significant performance gain on high resolution benchmarks, and shows strong generalization for visual grounding, hallucination mitigation, and math problem solving tasks.
 ![](docs/accuracy_comparison.svg)
-- We observed an emergence of thinking pattern during RL training process, such as visual search for small objects, visual comparisons across different regions, using `image_zoom_in_tools` for answer verification, etc.
+- We observed an emergence of thinking pattern during RL training process, such as visual search for small objects, visual comparisons across different regions, using `image_zoom_in_tools` for answer verification, etc. Check [our project homepage](https://visual-agent.github.io/) for more case study.
 ![](docs/fig1_sc2.png)
 
 ##  Quick Start
@@ -115,7 +115,43 @@ The code is designed to fulfill the following needs:
 </details>
 
 <details>
+<summary>Training Config</summary>
+
+### Training Config
+Most config parameters are exactly the same as in [verl official documentation](https://verl.readthedocs.io/en/latest/index.html).
+
+An additional group of config parameters is added to the default config [verl/trainer/config/ppo_trainer.yaml](verl/trainer/config/ppo_trainer.yaml) for agent RL setting.
+
+```yaml
+agent:
+  activate_agent: False
+  single_response_max_tokens: 32768
+  max_turns: 50
+  concurrent_workers: 1
+  tool_name_key: env_name
+  tool_meta_key: null
+  custom_stop: []
+  show_tqdm: True
+  vl_model_path: ${actor_rollout_ref.model.path}
+  max_vllm_images: 32
+  max_vllm_videos: 1
+```
+
+Arguments:
+- `activate_agent`: The switch to enable agent RL training. Setting this to False, the running code will be identical to the original version of verl.
+- `single_response_max_tokens`: The maximum number of tokens allowed to be generated in a single time agent interaction. Setting it to half or one third of the `max_response_length` to avoid the left padding problem.
+- `max_turns`: the maximum number os interactions that the agent is allowed to perform in an entire trajectory.
+- `concurrent_workers`: Number of threads that are used to execute the agent environment interation at the same time.
+- `custom_stop`: Forcing vllm engine to stop generating on custom strings. This is useful if agent training is based on custom prompt template.
+- `vl_model_path`: DO NOT CHANGE ITS VALUE IN YOUR SCRIPT.
+- `max_vllm_images` and `max_vllm_videos`: the limit for maximum number of images and videos in vllm engine.
+
+</details>
+
+<!-- <details>
 <summary>Code Navigation</summary>
+
+### Code Navigation
 
 Reproduction code for our [DeepEyes](https://arxiv.org/abs/2505.14362).
 - Training script: [examples/agent/final_merged_v1v8_thinklite.sh](examples/agent/final_merged_v1v8_thinklite.sh)
@@ -127,7 +163,7 @@ Reproduction code for [R1-Searcher](https://github.com/RUCAIBox/R1-Searcher) usi
 - Tool definition: [verl/workers/agent/envs/rag_engine/rag_engine_v2.py](verl/workers/agent/envs/rag_engine/rag_engine_v2.py)
 - Reward definition: [verl/utils/reward_score/agent.py](verl/utils/reward_score/agent.py)
 
-</details>
+</details> -->
 
 <details>
 <summary>Training on Customized Datasets</summary>
