@@ -37,3 +37,6 @@ We use Qwen2.5 72B deployed by VLLM as judge model, so `API_URL` is the address 
 
 ## Visualization
 We also provide the code `watch_demo.ipynb` to visualize the result. You should modify the `root_path` to the V* bench path and `json_path` to the result jsonl path. Desides, you can modify `line_id` or `tosee_img` to change the case to be visualized.  
+
+## Evaluate HRBench
+The evaluation of HRBench is similar to that of V*.
