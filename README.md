@@ -148,6 +148,8 @@ Arguments:
 
 </details>
 
+
+
 <!-- <details>
 <summary>Code Navigation</summary>
 
@@ -248,6 +250,11 @@ As shown in the commit history, we have been doing this for several times to syn
 
 The last time we sync with the verl main branch was on **April 23, 2025**. In the future, to ensure the reproducibility of our code, we will only do this on dev branch.
 
+</details>
+
+<details>
+<summary>Evaluation with Automatic BBOX Processing</summary>
+Please refer to <a href="eval/EVALUATION.md">EVALUATION.md</a> for evaluation details.
 </details>
 
 ## Licence
