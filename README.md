@@ -257,6 +257,10 @@ The last time we sync with the verl main branch was on **April 23, 2025**. In th
 Please refer to <a href="eval/EVALUATION.md">EVALUATION.md</a> for evaluation details.
 </details>
 
+## Star Chart
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Visual-Agent/DeepEyes&type=Date)](https://star-history.com/#Visual-Agent/DeepEyes&Date)
+
 ## Licence
 
 This project is released under [Apache licence](./LICENSE).
