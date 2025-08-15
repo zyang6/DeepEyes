@@ -1,18 +1,13 @@
-import re
-import os
 import json
-import random
-import requests
-import numpy as np
 from io import BytesIO
-from PIL import Image
-from time import sleep
 
-from playwright.sync_api import sync_playwright, Playwright
 from duckduckgo_search import DDGS
+from PIL import Image
+from playwright.sync_api import Playwright, sync_playwright
 
-from verl.utils.dataset.rl_dataset import process_image
+# from verl.utils.dataset.rl_dataset import process_image
 from verl.workers.agent.tool_envs import ToolBase, extract_tool_call_contents
+
 
 class MMSearchEngine(ToolBase):
     name = "mm_search"
@@ -32,20 +27,22 @@ class MMSearchEngine(ToolBase):
         super().__init__(name=self.name)
 
     def execute(self, action_string, **kwargs):
-        self.chatml_history.append({
-            "role": "assistant",
-            "content": action_string,
-        })
+        self.chatml_history.append(
+            {
+                "role": "assistant",
+                "content": action_string,
+            }
+        )
 
         answers = extract_tool_call_contents(self.answer_start, self.answer_end, action_string)
         if answers:
             # print(f' [DEBUG] found answer in {action_string=}')
-            return '', 0.0, True, {}
+            return "", 0.0, True, {}
 
         search_list = extract_tool_call_contents(self.search_start, self.search_end, action_string)
         browse_list = extract_tool_call_contents(self.browse_start, self.browse_end, action_string)
         if len(search_list) > 0:
-            search_key = ' '.join([item.strip() for item in search_list])
+            search_key = " ".join([item.strip() for item in search_list])
             search_results = self.ddgs.text(search_key, max_results=self.top_k)
             result_text = self.convert_search_to_text(search_results)
             result_text = f"\n<search_result>\n{result_text}\n</search_result>\n"
@@ -54,7 +51,7 @@ class MMSearchEngine(ToolBase):
         elif len(browse_list) > 0:
             browse_list = [url.strip() for url in browse_list]
             img_list = [self.get_screenshot_from_url(url) for url in browse_list]
-            self.multi_modal_data['image'] += img_list
+            self.multi_modal_data["image"] += img_list
 
             prompt_list = [f"Screenshot for website {url}\n<image>" for url in browse_list]
             prompt_text = "\n\n".join(prompt_list)
@@ -63,11 +60,11 @@ class MMSearchEngine(ToolBase):
                 "prompt": prompt_text,
                 "multi_modal_data": {"image": img_list},
             }
-            print(f' [DEBUG browser] return {len(img_list)} images for {browse_list=}')
+            print(f" [DEBUG browser] return {len(img_list)} images for {browse_list=}")
             return obs, 0.0, False, {}
         else:
             # print(f' [DEBUG browser] no action_list in {action_string=}')
-            return '',  0.0, True, {}
+            return "", 0.0, True, {}
 
     def reset(self, raw_prompt, multi_modal_data, origin_multi_modal_data, **kwargs):
         """
@@ -80,7 +77,11 @@ class MMSearchEngine(ToolBase):
         """
         self.ddgs = DDGS()
         self.chatml_history = raw_prompt.tolist()
-        if origin_multi_modal_data is None or not isinstance(origin_multi_modal_data, dict) or 'image' not in origin_multi_modal_data.keys():
+        if (
+            origin_multi_modal_data is None
+            or not isinstance(origin_multi_modal_data, dict)
+            or "image" not in origin_multi_modal_data.keys()
+        ):
             self.multi_modal_data = {"image": []}
         else:
             self.multi_modal_data = origin_multi_modal_data
@@ -90,11 +91,11 @@ class MMSearchEngine(ToolBase):
         for result in search_results:
             docstr = json.dumps(result, ensure_ascii=False, indent=2)
             search_json_list.append(docstr)
-        return '\n'.join(search_json_list)
+        return "\n".join(search_json_list)
 
     def get_screenshot_from_url(self, url):
         def run_single(playwright: Playwright):
-            chromium = playwright.chromium # or "firefox" or "webkit".
+            chromium = playwright.chromium  # or "firefox" or "webkit".
             browser = chromium.launch()
             page = browser.new_page()
             page.goto(url)

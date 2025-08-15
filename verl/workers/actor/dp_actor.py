@@ -28,17 +28,17 @@ import verl.utils.torch_functional as verl_F
 from verl import DataProto
 from verl.trainer.ppo.core_algos import agg_loss, compute_policy_loss, kl_penalty
 from verl.utils.debug import GPUMemoryLogger
+from verl.utils.device import get_device_name, get_torch_device, is_cuda_available, is_npu_available
 from verl.utils.py_functional import append_to_dict
 from verl.utils.seqlen_balancing import get_reverse_idx, rearrange_micro_batches
 from verl.utils.torch_functional import logprobs_from_logits
 from verl.utils.ulysses import gather_outpus_and_unpad, ulysses_pad_and_slice_inputs
 from verl.workers.actor import BasePPOActor
-from verl.utils.device import get_device_name, get_torch_device, is_cuda_available, is_npu_available
 
 if is_cuda_available:
-    from flash_attn.bert_padding import pad_input, unpad_input, rearrange, index_first_axis
+    from flash_attn.bert_padding import index_first_axis, pad_input, rearrange, unpad_input
 elif is_npu_available:
-    from transformers.integrations.npu_flash_attention import pad_input, unpad_input, rearrange, index_first_axis
+    from transformers.integrations.npu_flash_attention import index_first_axis, pad_input, rearrange, unpad_input
 
 __all__ = ["DataParallelPPOActor"]
 
@@ -80,7 +80,7 @@ class DataParallelPPOActor(BasePPOActor):
                     [inputs[key] for inputs in micro_batch["multi_modal_inputs"]], dim=0
                 )
 
-        with torch.autocast(device_type=self.deivce_name, dtype=torch.bfloat16):
+        with torch.autocast(device_type=self.device_name, dtype=torch.bfloat16):
             input_ids = micro_batch["input_ids"]
             batch_size, seqlen = input_ids.shape
             attention_mask = micro_batch["attention_mask"]
@@ -275,7 +275,15 @@ class DataParallelPPOActor(BasePPOActor):
 
         temperature = data.meta_info["temperature"]  # temperature must be in the data.meta_info to avoid slient error
 
-        select_keys = ["responses", "input_ids", "attention_mask", "position_ids", "old_log_probs", "advantages", "action_mask"]
+        select_keys = [
+            "responses",
+            "input_ids",
+            "attention_mask",
+            "position_ids",
+            "old_log_probs",
+            "advantages",
+            "action_mask",
+        ]
         if self.config.use_kl_loss:
             select_keys.append("ref_log_prob")
         batch = data.select(batch_keys=select_keys, strict=False).batch
@@ -300,7 +308,9 @@ class DataParallelPPOActor(BasePPOActor):
                         self.config.ppo_mini_batch_size // self.config.ppo_micro_batch_size_per_gpu
                     )
                     num_micro_batches = mini_batch.batch.batch_size[0] // self.config.ppo_micro_batch_size_per_gpu
-                    micro_batches = data.select(select_keys, non_tensor_select_keys, strict=False).chunk(num_micro_batches)
+                    micro_batches = data.select(select_keys, non_tensor_select_keys, strict=False).chunk(
+                        num_micro_batches
+                    )
                 elif self.config.use_dynamic_bsz:
                     max_token_len = self.config.ppo_max_token_len_per_gpu * self.ulysses_sequence_parallel_size
                     micro_batches, _ = rearrange_micro_batches(batch=mini_batch, max_token_len=max_token_len)
@@ -321,7 +331,9 @@ class DataParallelPPOActor(BasePPOActor):
                         data = data.to(get_torch_device().current_device())  # actor device is cpu when using offload
                     responses = data["responses"]
                     response_length = responses.size(1)
-                    action_or_attn_mask = data['action_mask'] if 'action_mask' in data.keys() else data['attention_mask']
+                    action_or_attn_mask = (
+                        data["action_mask"] if "action_mask" in data.keys() else data["attention_mask"]
+                    )
 
                     response_mask = action_or_attn_mask[:, -response_length:]
                     old_log_prob = data["old_log_probs"]
