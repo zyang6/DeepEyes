@@ -14,8 +14,7 @@
 """Utilities for distributed training."""
 
 import os
-
-from verl.utils.device import get_torch_device, is_cuda_available
+from verl.utils.device import is_cuda_available, get_torch_device
 
 
 def initialize_global_process_group(timeout_second=36000):

@@ -30,8 +30,6 @@ from verl.utils.device import get_torch_device
 
 from .base import BaseShardingManager
 
-# from .patch import patched_ds_v3_load_weights, patched_qwen_moe_load_weights
-
 logger = logging.getLogger(__file__)
 logger.setLevel(os.getenv("VERL_LOGGING_LEVEL", "WARN"))
 
